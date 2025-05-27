@@ -135,7 +135,7 @@ async function startServer() {
         });
 
         // Set up cron job
-        cron.schedule('*/5 * * * *', async () => {
+        cron.schedule('0 */2 * * *', async () => {
             const startTime = new Date();
             console.log(`\n🕐 ========== STORM CHECK STARTED: ${startTime.toLocaleString()} ==========`);
             
@@ -218,7 +218,7 @@ async function startServer() {
                 console.log(`⚡ Total alerts found: ${totalAlertsFound}`);
                 console.log(`📧 Emails sent: ${totalEmailsSent}`);
                 console.log(`🌩️ States with alerts: ${statesWithAlerts.length > 0 ? statesWithAlerts.join(', ') : 'None'}`);
-                console.log(`🕐 Next check at: ${new Date(Date.now() + 5 * 60 * 1000).toLocaleString()}`);
+                console.log(`🕐 Next check at: ${new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleString()}`);
                 console.log(`================================================\n`);
                 
             } catch (error) {
@@ -228,7 +228,7 @@ async function startServer() {
                 // Try to notify admin of the error
                 try {
                     // You could add admin notification here if needed
-                    console.log('🔄 Storm check will retry in 5 minutes...');
+                    console.log('🔄 Storm check will retry in 2 hours...');
                 } catch (notifyError) {
                     console.error('Failed to notify admin of error:', notifyError.message);
                 }
