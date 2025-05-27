@@ -473,6 +473,132 @@ class WeatherService {
             return [];
         }
     }
+
+    async getRecentHistoricalAlerts(state, hoursBack = 2) {
+        try {
+            console.log(`🕐 Checking historical alerts for ${state} (past ${hoursBack} hours)...`);
+            
+            const offices = this.stateOfficeMapping[state] || [];
+            if (Object.keys(offices).length === 0) {
+                console.log(`No weather offices configured for ${state}`);
+                return [];
+            }
+
+            let allHistoricalAlerts = [];
+            const cutoffTime = new Date(Date.now() - (hoursBack * 60 * 60 * 1000));
+            
+            // Get alerts from the past few hours using the general alerts endpoint
+            try {
+                const stateAbbrev = this.stateAbbreviations[state];
+                console.log(`📡 Fetching recent alerts for ${state} (${stateAbbrev})...`);
+                
+                const alertsResponse = await axios.get(`${this.baseUrl}/alerts`, {
+                    headers: {
+                        'User-Agent': this.userAgent,
+                        'Accept': 'application/geo+json'
+                    },
+                    params: {
+                        area: stateAbbrev,
+                        limit: 500 // Get more alerts to ensure we catch recent ones
+                    },
+                    timeout: 15000
+                });
+
+                if (alertsResponse.data && alertsResponse.data.features) {
+                    const alerts = alertsResponse.data.features;
+                    console.log(`📋 Found ${alerts.length} total recent alerts for ${state}`);
+                    
+                    const recentStormAlerts = alerts.filter(alert => {
+                        const event = alert.properties.event;
+                        const onset = new Date(alert.properties.onset || alert.properties.sent);
+                        const expires = new Date(alert.properties.expires || alert.properties.ends);
+                        const description = alert.properties.description || '';
+                        const headline = alert.properties.headline || '';
+                        
+                        // Check if this alert was active within our time window
+                        const wasRecentlyActive = (
+                            onset >= cutoffTime || // Started recently
+                            expires >= cutoffTime || // Ended recently
+                            (onset <= cutoffTime && expires >= new Date()) // Was active during our window
+                        );
+                        
+                        // Same storm filtering as active alerts
+                        const isSevereEvent = (
+                            event.includes('Tornado') ||
+                            event.includes('Thunderstorm') ||
+                            event.includes('Storm') ||
+                            event.includes('Hail') ||
+                            event.includes('Wind') ||
+                            event.includes('Hurricane') ||
+                            event.includes('Tropical') ||
+                            event.includes('Flash Flood') ||
+                            event.includes('Warning') ||
+                            description.toLowerCase().includes('hail') ||
+                            description.toLowerCase().includes('wind') ||
+                            description.toLowerCase().includes('storm') ||
+                            description.toLowerCase().includes('tornado') ||
+                            headline.toLowerCase().includes('storm') ||
+                            headline.toLowerCase().includes('wind') ||
+                            headline.toLowerCase().includes('hail')
+                        );
+
+                        if (isSevereEvent && wasRecentlyActive) {
+                            console.log(`🕐 RECENT STORM FOUND: ${event}`);
+                            console.log(`   Onset: ${onset.toLocaleString()}`);
+                            console.log(`   Expires: ${expires.toLocaleString()}`);
+                            console.log(`   Area: ${alert.properties.areaDesc}`);
+                        }
+
+                        return isSevereEvent && wasRecentlyActive;
+                    });
+
+                    console.log(`⚡ Found ${recentStormAlerts.length} recent storm alerts for ${state}`);
+                    allHistoricalAlerts = recentStormAlerts;
+                }
+            } catch (error) {
+                console.error(`Error fetching historical alerts for ${state}:`, error.message);
+            }
+
+            return allHistoricalAlerts;
+        } catch (error) {
+            console.error(`Error in getRecentHistoricalAlerts for ${state}:`, error.message);
+            return [];
+        }
+    }
+
+    async getComprehensiveWeatherAlerts(state) {
+        console.log(`🌩️ Getting comprehensive weather data for ${state}...`);
+        
+        // Get both active and recent historical alerts
+        const [activeAlerts, historicalAlerts] = await Promise.all([
+            this.getWeatherAlerts(state),
+            this.getRecentHistoricalAlerts(state, 2)
+        ]);
+
+        // Combine and deduplicate alerts
+        const allAlerts = [...activeAlerts];
+        
+        // Add historical alerts that aren't already in active alerts
+        for (const historical of historicalAlerts) {
+            const isDuplicate = activeAlerts.some(active => 
+                active.properties.id === historical.properties.id ||
+                (active.properties.event === historical.properties.event &&
+                 active.properties.areaDesc === historical.properties.areaDesc &&
+                 Math.abs(new Date(active.properties.sent) - new Date(historical.properties.sent)) < 60000) // Within 1 minute
+            );
+            
+            if (!isDuplicate) {
+                allAlerts.push(historical);
+            }
+        }
+
+        console.log(`📊 COMPREHENSIVE RESULTS for ${state}:`);
+        console.log(`   Active alerts: ${activeAlerts.length}`);
+        console.log(`   Historical alerts: ${historicalAlerts.length}`);
+        console.log(`   Total unique alerts: ${allAlerts.length}`);
+
+        return allAlerts;
+    }
 }
 
 module.exports = WeatherService; 

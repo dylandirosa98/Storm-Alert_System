@@ -109,8 +109,8 @@ app.get('/api/test-storm-check', async (req, res) => {
     
     for (const state of subscribedStates) {
         console.log(`Checking ${state}...`);
-        const alerts = await weatherService.getWeatherAlerts(state);
-        console.log(`Found ${alerts.length} alerts`);
+        const alerts = await weatherService.getComprehensiveWeatherAlerts(state);
+        console.log(`Found ${alerts.length} total alerts (active + recent)`);
         
         if (alerts.length > 0) {
             const stormData = await stormAnalyzer.analyzeStorms(alerts);
@@ -119,7 +119,7 @@ app.get('/api/test-storm-check', async (req, res) => {
         }
     }
     
-    res.json({ message: 'Check complete - see server console' });
+    res.json({ message: 'Comprehensive check complete - see server console' });
 });
 
 // Start server function
@@ -157,8 +157,8 @@ async function startServer() {
                     console.log(`\n🌍 Checking ${state} for weather alerts...`);
                     
                     try {
-                        const alerts = await weatherService.getWeatherAlerts(state);
-                        console.log(`📋 Found ${alerts ? alerts.length : 0} alerts in ${state}`);
+                        const alerts = await weatherService.getComprehensiveWeatherAlerts(state);
+                        console.log(`📋 Found ${alerts ? alerts.length : 0} total alerts in ${state} (active + recent)`);
                         
                         if (alerts && alerts.length > 0) {
                             totalAlertsFound += alerts.length;
