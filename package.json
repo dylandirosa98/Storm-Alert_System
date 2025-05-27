@@ -1,0 +1,35 @@
+{
+  "name": "storm-alert-system",
+  "version": "1.0.0",
+  "description": "Real-time storm alert system for roofing companies",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test-resend-email-flow.js",
+    "verify": "node verify-live-storms.js",
+    "cron": "node cron-job.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "resend": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "storm",
+    "weather",
+    "alerts",
+    "roofing",
+    "email",
+    "automation"
+  ],
+  "author": "Dylan DiRosa",
+  "license": "MIT"
+}
