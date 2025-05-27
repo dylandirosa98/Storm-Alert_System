@@ -374,22 +374,57 @@ class WeatherService {
                             const severeAlerts = alerts.filter(alert => {
                                 const event = alert.properties.event;
                                 const severity = alert.properties.severity;
+                                const description = alert.properties.description || '';
+                                const headline = alert.properties.headline || '';
                                 
-                                // Only include severe weather events
+                                // Log every alert we find for debugging
+                                console.log(`🔍 Analyzing alert: ${event}`);
+                                console.log(`   Severity: ${severity || 'Not specified'}`);
+                                console.log(`   Zone: ${zoneId}`);
+                                console.log(`   Area: ${alert.properties.areaDesc || 'Not specified'}`);
+                                
+                                // Much more inclusive filtering - any storm-related event
                                 const isSevereEvent = (
+                                    // Tornado events
                                     event.includes('Tornado') ||
-                                    event.includes('Severe Thunderstorm') ||
+                                    // Thunderstorm events (any level)
+                                    event.includes('Thunderstorm') ||
+                                    event.includes('Storm') ||
+                                    // Hail events (any size)
                                     event.includes('Hail') ||
+                                    // Wind events (any severity)
+                                    event.includes('Wind') ||
+                                    // Hurricane/Tropical
                                     event.includes('Hurricane') ||
-                                    event.includes('Tropical Storm') ||
-                                    (event.includes('Wind') && severity === 'Severe')
+                                    event.includes('Tropical') ||
+                                    // Flood events that could indicate severe storms
+                                    event.includes('Flash Flood') ||
+                                    // Any warning (not just watches)
+                                    event.includes('Warning') ||
+                                    // Check description for storm keywords
+                                    description.toLowerCase().includes('hail') ||
+                                    description.toLowerCase().includes('wind') ||
+                                    description.toLowerCase().includes('storm') ||
+                                    description.toLowerCase().includes('tornado') ||
+                                    headline.toLowerCase().includes('storm') ||
+                                    headline.toLowerCase().includes('wind') ||
+                                    headline.toLowerCase().includes('hail')
                                 );
 
-                                // Check if alert is for the correct state
-                                const isCorrectState = alert.properties.areaDesc.includes(state);
+                                // Less restrictive state checking - just check if it's in the right general area
+                                const stateAbbrev = this.stateAbbreviations[state];
+                                const isCorrectState = alert.properties.areaDesc.includes(stateAbbrev) || 
+                                                     alert.properties.areaDesc.includes(state) ||
+                                                     zoneId.startsWith(stateAbbrev); // If we're checking the zone, it should be the right state
 
-                                if (isSevereEvent && isCorrectState) {
-                                    console.log(`Found severe alert: ${event} in ${state}`);
+                                if (isSevereEvent) {
+                                    console.log(`✅ STORM EVENT FOUND: ${event}`);
+                                    console.log(`   Will include in analysis: ${isSevereEvent && isCorrectState}`);
+                                    if (!isCorrectState) {
+                                        console.log(`   ⚠️ State mismatch - Expected: ${state}/${stateAbbrev}, Got: ${alert.properties.areaDesc}`);
+                                    }
+                                } else {
+                                    console.log(`❌ Not a storm event: ${event}`);
                                 }
 
                                 return isSevereEvent && isCorrectState;

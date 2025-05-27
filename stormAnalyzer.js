@@ -1,5 +1,7 @@
 class StormAnalyzer {
     analyzeStorms(alerts) {
+        console.log(`🔍 Storm Analyzer: Analyzing ${alerts.length} alerts`);
+        
         const analysis = {
             severity: 'low',
             affectedAreas: [],
@@ -9,8 +11,15 @@ class StormAnalyzer {
             details: []
         };
 
-        alerts.forEach(alert => {
+        let maxSeverityScore = 0;
+
+        alerts.forEach((alert, index) => {
             const properties = alert.properties;
+            
+            console.log(`\n📋 Alert ${index + 1}/${alerts.length}:`);
+            console.log(`   Event Type: ${properties.event}`);
+            console.log(`   Severity: ${properties.severity || 'Not specified'}`);
+            console.log(`   Area: ${properties.areaDesc || 'Not specified'}`);
             
             const stormInfo = {
                 type: properties.event,
@@ -22,23 +31,74 @@ class StormAnalyzer {
 
             let severityScore = 0;
             
-            if (stormInfo.type.includes('Tornado')) severityScore += 10;
-            if (stormInfo.type.includes('Hurricane')) severityScore += 9;
+            // More inclusive scoring - give points for any storm activity
+            if (stormInfo.type.includes('Tornado')) {
+                severityScore += 10;
+                console.log(`   🌪️ Tornado detected: +10 points`);
+            }
+            if (stormInfo.type.includes('Hurricane')) {
+                severityScore += 9;
+                console.log(`   🌀 Hurricane detected: +9 points`);
+            }
             if (stormInfo.type.includes('Hail')) {
                 const hailSize = this.extractHailSize(stormInfo.description);
-                if (hailSize >= 2) severityScore += 8;
-                else if (hailSize >= 1) severityScore += 6;
-                else severityScore += 4;
+                if (hailSize >= 2) {
+                    severityScore += 8;
+                    console.log(`   🧊 Large hail (${hailSize}") detected: +8 points`);
+                } else if (hailSize >= 1) {
+                    severityScore += 6;
+                    console.log(`   🧊 Hail (${hailSize}") detected: +6 points`);
+                } else {
+                    severityScore += 4; // Any hail gets points
+                    console.log(`   🧊 Hail detected: +4 points`);
+                }
             }
-            if (stormInfo.type.includes('Severe Thunderstorm')) severityScore += 5;
+            if (stormInfo.type.includes('Severe Thunderstorm') || stormInfo.type.includes('Thunderstorm')) {
+                severityScore += 5;
+                console.log(`   ⛈️ Thunderstorm detected: +5 points`);
+            }
+            if (stormInfo.type.includes('Wind')) {
+                severityScore += 4; // Any wind event gets points
+                console.log(`   💨 Wind event detected: +4 points`);
+            }
+            if (stormInfo.type.includes('Flood Warning')) {
+                severityScore += 6; // Flood warnings are serious
+                console.log(`   🌊 Flood Warning detected: +6 points`);
+            } else if (stormInfo.type.includes('Flood Watch') || stormInfo.type.includes('Flood')) {
+                severityScore += 4; // Flood watches and general flood alerts
+                console.log(`   🌊 Flood event detected: +4 points`);
+            }
+            if (stormInfo.type.includes('Warning')) {
+                severityScore += 3; // Warnings are more serious than watches
+                console.log(`   ⚠️ Warning (not watch) detected: +3 points`);
+            }
+            if (stormInfo.type.includes('Flash Flood')) {
+                severityScore += 3; // Flash floods often accompany severe storms
+                console.log(`   🌊 Flash Flood detected: +3 points`);
+            }
+            if (stormInfo.type.includes('Special Weather Statement')) {
+                severityScore += 3; // Special weather statements often indicate developing severe weather
+                console.log(`   📢 Special Weather Statement detected: +3 points`);
+            }
+            if (stormInfo.type.includes('Advisory')) {
+                severityScore += 2; // Weather advisories indicate notable conditions
+                console.log(`   📋 Weather Advisory detected: +2 points`);
+            }
             
             const windSpeed = this.extractWindSpeed(stormInfo.description);
-            if (windSpeed >= 70) severityScore += 7;
-            else if (windSpeed >= 58) severityScore += 5;
+            if (windSpeed >= 70) {
+                severityScore += 7;
+                console.log(`   💨 High winds (${windSpeed} mph): +7 points`);
+            } else if (windSpeed >= 58) {
+                severityScore += 5;
+                console.log(`   💨 Strong winds (${windSpeed} mph): +5 points`);
+            } else if (windSpeed >= 40) {
+                severityScore += 2;
+                console.log(`   💨 Moderate winds (${windSpeed} mph): +2 points`);
+            }
 
-            if (severityScore >= 8) analysis.severity = 'extreme';
-            else if (severityScore >= 6) analysis.severity = 'high';
-            else if (severityScore >= 4) analysis.severity = 'moderate';
+            console.log(`   📊 Total severity score: ${severityScore}`);
+            maxSeverityScore = Math.max(maxSeverityScore, severityScore);
 
             const zipCodes = this.extractZipCodes(stormInfo.areas);
             
@@ -48,6 +108,8 @@ class StormAnalyzer {
             });
 
             const damageEstimate = this.estimateDamage(stormInfo, severityScore);
+            console.log(`   💰 Estimated jobs: ${damageEstimate.potentialJobs}`);
+            console.log(`   💰 Market value: $${damageEstimate.totalMarketValue.toLocaleString()}`);
             
             analysis.details.push({
                 ...stormInfo,
@@ -59,9 +121,30 @@ class StormAnalyzer {
             });
         });
 
+        // Set overall severity based on max score
+        if (maxSeverityScore >= 8) analysis.severity = 'extreme';
+        else if (maxSeverityScore >= 5) analysis.severity = 'high';
+        else if (maxSeverityScore >= 3) analysis.severity = 'moderate';
+        else analysis.severity = 'low';
+
+        console.log(`\n📊 Overall Analysis:`);
+        console.log(`   Max Severity Score: ${maxSeverityScore}`);
+        console.log(`   Overall Severity: ${analysis.severity}`);
+
+        // MUCH LOWER THRESHOLD - send emails for moderate severity or higher, or any storm with potential jobs
         analysis.worthCanvassing = analysis.severity === 'high' || 
                                    analysis.severity === 'extreme' ||
-                                   analysis.details.some(d => d.damageEstimate.potentialJobs >= 50);
+                                   analysis.severity === 'moderate' ||  // LOWERED THRESHOLD
+                                   analysis.details.some(d => d.damageEstimate.potentialJobs >= 25) ||  // LOWERED THRESHOLD
+                                   maxSeverityScore >= 3;  // NEW: Any storm with score 3+ gets sent
+
+        console.log(`   Worth Canvassing: ${analysis.worthCanvassing}`);
+        
+        if (!analysis.worthCanvassing) {
+            console.log(`   ❌ Alert will NOT be sent - severity too low or no damage potential`);
+        } else {
+            console.log(`   ✅ Alert WILL be sent to subscribers!`);
+        }
 
         analysis.recommendations = this.generateRecommendations(analysis);
 
