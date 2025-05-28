@@ -400,6 +400,10 @@ class EmailService {
         const cities = this.extractCitiesFromAreas(detail.areas);
         const primaryCity = cities[0] || 'Affected Area';
         
+        // Filter out zip codes containing letters (keep only numeric zip codes)
+        const numericZipCodes = detail.zipCodes.filter(zip => /^\d+$/.test(zip.toString()));
+        console.log(`Filtered zip codes: ${detail.zipCodes.length} total, ${numericZipCodes.length} numeric only`);
+        
         // Format recommendations as HTML list items
         const recommendationsList = stormData.recommendations
             .map(rec => `<li>${rec}</li>`)
@@ -410,7 +414,8 @@ class EmailService {
 
         for (const company of companies) {
             try {
-                const unsubscribeUrl = this.generateUnsubscribeUrl(company.email, detail.zipCodes);
+                // Use numeric zip codes for unsubscribe URL
+                const unsubscribeUrl = this.generateUnsubscribeUrl(company.email, numericZipCodes);
                 
                 const emailHtml = template
                     .replace(/{city}/g, primaryCity)
@@ -420,14 +425,15 @@ class EmailService {
                     .replace(/{hail_size}/g, detail.hailSize > 0 ? detail.hailSize.toFixed(1) : 'N/A')
                     .replace(/{wind_speed}/g, detail.windSpeed > 0 ? detail.windSpeed : 'N/A')
                     .replace(/{affected_cities}/g, cities.join(', '))
-                    .replace(/{zip_codes}/g, detail.zipCodes.slice(0, 10).join(', ') + (detail.zipCodes.length > 10 ? '...' : ''))
+                    .replace(/{zip_codes}/g, numericZipCodes.slice(0, 10).join(', ') + (numericZipCodes.length > 10 ? '...' : ''))
                     .replace(/{market_value}/g, this.formatCurrency(marketData.totalValue))
                     .replace(/{potential_jobs}/g, marketData.jobCount.toLocaleString())
                     .replace(/{avg_job_value}/g, marketData.avgJobValue.toLocaleString())
                     .replace(/{recommendations_list}/g, recommendationsList)
                     .replace(/{unsubscribe_url}/g, unsubscribeUrl);
 
-                const subject = `⛈️ STORM ALERT: ${detail.type} - ${primaryCity} Area (Severity ${detail.severityScore}/10)`;
+                // Include state in subject line
+                const subject = `⛈️ STORM ALERT: ${detail.type} - ${primaryCity}, ${stormData.state} (Severity ${detail.severityScore}/10)`;
 
                 await this.sendEmail(company.email, subject, emailHtml);
                 successCount++;
