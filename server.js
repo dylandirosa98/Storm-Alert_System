@@ -190,8 +190,8 @@ function initializeDatabase() {
     console.log('Database initialized successfully');
 }
 
-// Unsubscribe endpoint
-app.get('/unsubscribe', async (req, res) => {
+// Unsubscribe endpoint - make sure it matches the URL exactly
+app.get('/api/unsubscribe', async (req, res) => {
     const { token, email } = req.query;
     
     if (!token || !email) {

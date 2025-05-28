@@ -53,10 +53,10 @@ class EmailService {
 
     generateUnsubscribeUrl(email, zipCodes) {
         const token = this.generateUnsubscribeToken(email, zipCodes);
-        // Use the Railway deployment URL
-        const baseUrl = process.env.BASE_URL || 'https://storm-alert-system-production.up.railway.app';
+        // Use the Railway deployment URL with the correct API path
+        const baseUrl = process.env.BASE_URL || 'https://web-production-bb99.up.railway.app';
         console.log('Base URL for unsubscribe:', baseUrl);
-        const unsubscribeUrl = `${baseUrl}/unsubscribe?token=${token}&email=${encodeURIComponent(email)}`;
+        const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${token}&email=${encodeURIComponent(email)}`;
         console.log('Generated unsubscribe URL:', unsubscribeUrl);
         return unsubscribeUrl;
     }
