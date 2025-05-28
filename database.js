@@ -16,11 +16,16 @@ class Database {
                         return;
                     }
 
+                    console.log('Database file opened successfully');
+
                     // Enable foreign keys
                     this.db.run('PRAGMA foreign_keys = ON');
 
                     // Create tables in sequence
                     this.db.serialize(() => {
+                        let tablesCreated = 0;
+                        const totalTables = 3;
+
                         // Companies table with UNIQUE email constraint
                         this.db.run(`
                             CREATE TABLE IF NOT EXISTS companies (
@@ -39,21 +44,12 @@ class Database {
                                 reject(err);
                                 return;
                             }
-                        });
-
-                        // Remove duplicate emails, keeping only the most recent entry
-                        this.db.run(`
-                            DELETE FROM companies 
-                            WHERE id NOT IN (
-                                SELECT MAX(id) 
-                                FROM companies 
-                                GROUP BY email
-                            )
-                        `, (err) => {
-                            if (err) {
-                                console.error('Error removing duplicate emails:', err);
-                                reject(err);
-                                return;
+                            console.log('Companies table created/verified');
+                            tablesCreated++;
+                            
+                            if (tablesCreated === totalTables) {
+                                console.log('All database tables initialized successfully');
+                                resolve();
                             }
                         });
 
@@ -72,7 +68,55 @@ class Database {
                                 reject(err);
                                 return;
                             }
-                            resolve();
+                            console.log('Storm events table created/verified');
+                            tablesCreated++;
+                            
+                            if (tablesCreated === totalTables) {
+                                console.log('All database tables initialized successfully');
+                                resolve();
+                            }
+                        });
+
+                        // Unsubscribes table
+                        this.db.run(`
+                            CREATE TABLE IF NOT EXISTS unsubscribes (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                email TEXT NOT NULL,
+                                zip_codes TEXT,
+                                unsubscribe_token TEXT UNIQUE,
+                                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                all_alerts BOOLEAN DEFAULT FALSE
+                            )
+                        `, (err) => {
+                            if (err) {
+                                console.error('Error creating unsubscribes table:', err);
+                                reject(err);
+                                return;
+                            }
+                            console.log('Unsubscribes table created/verified');
+                            tablesCreated++;
+                            
+                            if (tablesCreated === totalTables) {
+                                console.log('All database tables initialized successfully');
+                                resolve();
+                            }
+                        });
+
+                        // Remove duplicate emails after tables are created
+                        this.db.run(`
+                            DELETE FROM companies 
+                            WHERE id NOT IN (
+                                SELECT MAX(id) 
+                                FROM companies 
+                                GROUP BY email
+                            )
+                        `, (err) => {
+                            if (err) {
+                                console.error('Error removing duplicate emails:', err);
+                                // Don't reject here, just log the error
+                            } else {
+                                console.log('Duplicate emails cleaned up');
+                            }
                         });
                     });
                 });

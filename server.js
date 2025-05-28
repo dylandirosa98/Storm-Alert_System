@@ -24,20 +24,21 @@ let db, weatherService, emailService, stormAnalyzer;
 // Initialize database and services
 async function initializeServices() {
     try {
+        console.log('🔧 Initializing database...');
         db = new Database();
         await db.initialize();
-        console.log('Database connection initialized successfully');
+        console.log('✅ Database connection initialized successfully');
         
+        console.log('🔧 Initializing services...');
         weatherService = new WeatherService();
         emailService = new EmailService();
         stormAnalyzer = new StormAnalyzer();
         
-        // Initialize database tables
-        initializeDatabase();
-        
-        console.log('All services initialized successfully');
+        console.log('✅ All services initialized successfully');
+        return true;
     } catch (error) {
-        console.error('Failed to initialize services:', error);
+        console.error('❌ Failed to initialize services:', error);
+        console.error('Stack trace:', error.stack);
         throw error;
     }
 }
@@ -194,46 +195,6 @@ app.post('/api/send-test-email', async (req, res) => {
         res.status(500).json({ error: 'Failed to send test email', details: error.message });
     }
 });
-
-// Initialize database
-function initializeDatabase() {
-    console.log('Initializing database tables...');
-    
-    // Create companies table
-    db.run(`CREATE TABLE IF NOT EXISTS companies (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        company_name TEXT NOT NULL,
-        contact_name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        phone TEXT,
-        states TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`, (err) => {
-        if (err) {
-            console.error('Error creating companies table:', err);
-        } else {
-            console.log('Companies table created/verified successfully');
-        }
-    });
-
-    // Create unsubscribes table
-    db.run(`CREATE TABLE IF NOT EXISTS unsubscribes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT NOT NULL,
-        zip_codes TEXT,
-        unsubscribe_token TEXT UNIQUE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        all_alerts BOOLEAN DEFAULT FALSE
-    )`, (err) => {
-        if (err) {
-            console.error('Error creating unsubscribes table:', err);
-        } else {
-            console.log('Unsubscribes table created/verified successfully');
-        }
-    });
-
-    console.log('Database initialization complete');
-}
 
 // Unsubscribe endpoint - make sure it matches the URL exactly
 app.get('/api/unsubscribe', async (req, res) => {
