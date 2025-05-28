@@ -7,16 +7,27 @@ class EmailService {
         // Initialize Resend with the API key
         this.resend = new Resend('re_TBwVnBac_H4XwzspEqMeMgREGGPGnproW');
         this.senderEmail = 'onboarding@resend.dev';
+        this.senderName = 'Storm Alert System';
         this.adminEmail = 'dylandirosa980@gmail.com';
     }
 
-    async sendEmail(to, subject, htmlContent, fromName = 'Storm Alert System') {
+    async sendEmail(to, subject, htmlContent) {
         try {
+            console.log('Sending email via Resend to:', to);
+            console.log('From:', this.senderEmail);
+            
             const { data, error } = await this.resend.emails.send({
-                from: this.senderEmail,
+                from: `${this.senderName} <${this.senderEmail}>`,
                 to: [to],
                 subject: subject,
                 html: htmlContent,
+                tags: [{ name: 'category', value: 'storm_alert' }],
+                headers: {
+                    'X-Entity-Ref-ID': new Date().getTime().toString(),
+                    'List-Unsubscribe': '<mailto:unsubscribe@stormalertsystem.com>',
+                    'Precedence': 'bulk'
+                },
+                text: 'This is a storm alert notification. Please enable HTML to view the full content.'
             });
 
             if (error) {
@@ -24,10 +35,12 @@ class EmailService {
                 throw new Error(`Email sending failed: ${error.message}`);
             }
 
+            console.log('Resend API response:', data);
             console.log(`✅ Email sent successfully to ${to}`);
+            console.log('Email ID:', data.id);
             return data;
         } catch (error) {
-            console.error(`❌ Failed to send email to ${to}:`, error.message);
+            console.error(`❌ Failed to send email to ${to}:`, error);
             throw error;
         }
     }
@@ -66,20 +79,30 @@ class EmailService {
             6: 0.7, 7: 0.8, 8: 0.9, 9: 1.0, 10: 1.2
         };
 
+        // Get the first storm detail
+        const detail = stormData.details[0];
+        if (!detail) {
+            return {
+                jobCount: 0,
+                avgJobValue: 0,
+                totalValue: 0
+            };
+        }
+
         // Base estimates per zip code (average residential properties)
         const avgPropertiesPerZip = 5000;
-        const totalProperties = stormData.zipCodes.length * avgPropertiesPerZip;
+        const totalProperties = detail.zipCodes.length * avgPropertiesPerZip;
         
-        let damageRate = severityMultiplier[stormData.severityScore] || 0.5;
+        let damageRate = severityMultiplier[detail.severityScore] || 0.5;
         
         // Adjust for specific storm types
-        if (stormData.hailSize >= 1.0) damageRate *= 1.5;
-        if (stormData.windSpeed >= 70) damageRate *= 1.3;
-        if (stormData.stormType.toLowerCase().includes('tornado')) damageRate *= 2.0;
-        if (stormData.stormType.toLowerCase().includes('hurricane')) damageRate *= 1.8;
+        if (detail.hailSize >= 1.0) damageRate *= 1.5;
+        if (detail.windSpeed >= 70) damageRate *= 1.3;
+        if (detail.type.toLowerCase().includes('tornado')) damageRate *= 2.0;
+        if (detail.type.toLowerCase().includes('hurricane')) damageRate *= 1.8;
 
-        const potentialJobs = Math.min(Math.round(totalProperties * damageRate), stormData.potentialJobs || 500);
-        const avgJobValue = stormData.avgJobValue || 8000;
+        const potentialJobs = Math.min(Math.round(totalProperties * damageRate), detail.damageEstimate?.potentialJobs || 500);
+        const avgJobValue = detail.damageEstimate?.avgJobValue || 8000;
         const totalValue = potentialJobs * avgJobValue;
 
         return {
@@ -312,7 +335,7 @@ class EmailService {
                 <h3>💰 Market Opportunity</h3>
                 <div class="market-highlight">
                     <div style="font-size: 18px; font-weight: 600; margin-bottom: 15px;">Total Market Value</div>
-                    <div class="market-value">${total_market_value}</div>
+                    <div class="market-value">{market_value}</div>
                     <div style="display: flex; justify-content: space-around; margin-top: 15px;">
                         <div>
                             <div style="font-weight: 600; color: #495057;">Potential Jobs</div>
@@ -320,7 +343,7 @@ class EmailService {
                         </div>
                         <div>
                             <div style="font-weight: 600; color: #495057;">Avg Job Value</div>
-                            <div style="font-size: 20px; font-weight: 700; color: #007bff;">$${avg_job_value}</div>
+                            <div style="font-size: 20px; font-weight: 700; color: #007bff;">{avg_job_value}</div>
                         </div>
                     </div>
                 </div>
@@ -393,9 +416,9 @@ class EmailService {
                     .replace(/{wind_speed}/g, detail.windSpeed > 0 ? detail.windSpeed : 'N/A')
                     .replace(/{affected_cities}/g, cities.join(', '))
                     .replace(/{zip_codes}/g, detail.zipCodes.slice(0, 10).join(', ') + (detail.zipCodes.length > 10 ? '...' : ''))
-                    .replace(/{total_market_value}/g, this.formatCurrency(marketData.totalValue))
+                    .replace(/{market_value}/g, this.formatCurrency(marketData.totalValue))
                     .replace(/{potential_jobs}/g, marketData.jobCount.toLocaleString())
-                    .replace(/\$\{avg_job_value\}/g, marketData.avgJobValue.toLocaleString())
+                    .replace(/{avg_job_value}/g, marketData.avgJobValue.toLocaleString())
                     .replace(/{recommendations_list}/g, recommendationsList)
                     .replace(/{unsubscribe_url}/g, unsubscribeUrl);
 
