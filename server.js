@@ -390,7 +390,7 @@ async function isUnsubscribed(email) {
         return await db.isUnsubscribed(email);
     } catch (error) {
         console.error('Error checking unsubscribe status:', error);
-        return false; // Default to not unsubscribed on error
+        return false;
     }
 }
 
@@ -398,20 +398,10 @@ async function isUnsubscribed(email) {
 async function checkForStormsAndAlert() {
     console.log('\n🔍 Starting comprehensive storm check...');
     
-    // Get all subscribed states
-    db.all('SELECT DISTINCT states FROM companies', async (err, rows) => {
-        if (err) {
-            console.error('Database error:', err);
-            return;
-        }
-
-        const subscribedStates = new Set();
-        rows.forEach(row => {
-            const states = JSON.parse(row.states);
-            states.forEach(state => subscribedStates.add(state));
-        });
-
-        console.log(`📊 Checking ${subscribedStates.size} subscribed states for storms...`);
+    try {
+        // Get all subscribed states using the Database class method
+        const subscribedStates = await db.getSubscribedStates();
+        console.log(`📊 Checking ${subscribedStates.length} subscribed states for storms...`);
 
         for (const state of subscribedStates) {
             try {
@@ -427,59 +417,50 @@ async function checkForStormsAndAlert() {
                     if (stormAnalysis.length > 0) {
                         console.log(`⚡ ${stormAnalysis.length} qualifying storm events found in ${state}!`);
                         
-                        // Get companies subscribed to this state
-                        db.all(
-                            'SELECT * FROM companies WHERE states LIKE ?',
-                            [`%"${state}"%`],
-                            async (err, companies) => {
-                                if (err) {
-                                    console.error('Error fetching companies:', err);
-                                    return;
-                                }
+                        // Get companies subscribed to this state using Database class method
+                        const companies = await db.getCompaniesByState(state);
 
-                                if (companies.length === 0) {
-                                    console.log(`📭 No companies subscribed to ${state}`);
-                                    return;
-                                }
+                        if (companies.length === 0) {
+                            console.log(`📭 No companies subscribed to ${state}`);
+                            continue;
+                        }
 
-                                console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
+                        console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
 
-                                // Filter out unsubscribed users
-                                const activeCompanies = [];
+                        // Filter out unsubscribed users
+                        const activeCompanies = [];
 
-                                for (const company of companies) {
-                                    try {
-                                        const unsubscribed = await isUnsubscribed(company.email);
-                                        
-                                        if (!unsubscribed) {
-                                            activeCompanies.push(company);
-                                        } else {
-                                            console.log(`🚫 Skipping unsubscribed user: ${company.email}`);
-                                        }
-                                    } catch (error) {
-                                        console.error(`❌ Error checking unsubscribe status for ${company.email}:`, error);
-                                        // Include the company if we can't check status (fail safe)
-                                        activeCompanies.push(company);
-                                    }
-                                }
-
-                                if (activeCompanies.length > 0) {
-                                    console.log(`📤 Sending alerts to ${activeCompanies.length} active subscribers`);
-                                    
-                                    // Send alerts to each qualifying storm
-                                    for (const storm of stormAnalysis) {
-                                        try {
-                                            const result = await emailService.sendStormAlert(storm, activeCompanies);
-                                            console.log(`✅ Storm alert batch completed: ${result.successCount} sent, ${result.errorCount} failed`);
-                                        } catch (error) {
-                                            console.error('❌ Error sending storm alerts:', error);
-                                        }
-                                    }
+                        for (const company of companies) {
+                            try {
+                                const unsubscribed = await db.isUnsubscribed(company.email);
+                                
+                                if (!unsubscribed) {
+                                    activeCompanies.push(company);
                                 } else {
-                                    console.log(`📭 No active subscribers for ${state} (all unsubscribed)`);
+                                    console.log(`🚫 Skipping unsubscribed user: ${company.email}`);
+                                }
+                            } catch (error) {
+                                console.error(`❌ Error checking unsubscribe status for ${company.email}:`, error);
+                                // Include the company if we can't check status (fail safe)
+                                activeCompanies.push(company);
+                            }
+                        }
+
+                        if (activeCompanies.length > 0) {
+                            console.log(`📤 Sending alerts to ${activeCompanies.length} active subscribers`);
+                            
+                            // Send alerts to each qualifying storm
+                            for (const storm of stormAnalysis) {
+                                try {
+                                    const result = await emailService.sendStormAlert(storm, activeCompanies);
+                                    console.log(`✅ Storm alert batch completed: ${result.successCount} sent, ${result.errorCount} failed`);
+                                } catch (error) {
+                                    console.error('❌ Error sending storm alerts:', error);
                                 }
                             }
-                        );
+                        } else {
+                            console.log(`📭 No active subscribers for ${state} (all unsubscribed)`);
+                        }
                     } else {
                         console.log(`📊 No qualifying storms found in ${state} (filtered out by roofing criteria)`);
                     }
@@ -490,7 +471,9 @@ async function checkForStormsAndAlert() {
                 console.error(`❌ Error checking storms for ${state}:`, error);
             }
         }
-    });
+    } catch (error) {
+        console.error('❌ Error getting subscribed states:', error);
+    }
 }
 
 // Start server function
@@ -550,9 +533,20 @@ async function startServer() {
         // Set up cron job only in production
         if (process.env.NODE_ENV === 'production') {
             console.log('Setting up production cron job...');
+            
+            // Run an immediate storm check after deployment
+            console.log('🚀 Running immediate post-deployment storm check...');
+            setTimeout(async () => {
+                await runStormCheck();
+                console.log('✅ Post-deployment storm check completed');
+            }, 5000); // Wait 5 seconds for server to fully start
+            
+            // Set up regular cron job for every 2 hours
             cron.schedule('0 */2 * * *', async () => {
                 await runStormCheck();
             });
+            
+            console.log('✅ Cron job scheduled for every 2 hours');
         } else {
             console.log('Development mode - cron job disabled');
         }

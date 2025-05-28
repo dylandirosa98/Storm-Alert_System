@@ -19,104 +19,110 @@ class Database {
                     console.log('Database file opened successfully');
 
                     // Enable foreign keys
-                    this.db.run('PRAGMA foreign_keys = ON');
+                    this.db.run('PRAGMA foreign_keys = ON', (err) => {
+                        if (err) {
+                            console.error('Error enabling foreign keys:', err);
+                            reject(err);
+                            return;
+                        }
 
-                    // Create tables in sequence
-                    this.db.serialize(() => {
-                        let tablesCreated = 0;
-                        const totalTables = 3;
+                        // Create tables in sequence
+                        this.db.serialize(() => {
+                            let tablesCreated = 0;
+                            const totalTables = 3;
 
-                        // Companies table with UNIQUE email constraint
-                        this.db.run(`
-                            CREATE TABLE IF NOT EXISTS companies (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                company_name TEXT NOT NULL,
-                                email TEXT NOT NULL UNIQUE,
-                                phone TEXT,
-                                contact_name TEXT NOT NULL,
-                                states TEXT NOT NULL,
-                                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                active BOOLEAN DEFAULT 1
-                            )
-                        `, (err) => {
-                            if (err) {
-                                console.error('Error creating companies table:', err);
-                                reject(err);
-                                return;
-                            }
-                            console.log('Companies table created/verified');
-                            tablesCreated++;
-                            
-                            if (tablesCreated === totalTables) {
-                                console.log('All database tables initialized successfully');
-                                resolve();
-                            }
-                        });
+                            // Companies table with UNIQUE email constraint
+                            this.db.run(`
+                                CREATE TABLE IF NOT EXISTS companies (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    company_name TEXT NOT NULL,
+                                    email TEXT NOT NULL UNIQUE,
+                                    phone TEXT,
+                                    contact_name TEXT NOT NULL,
+                                    states TEXT NOT NULL,
+                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                    active BOOLEAN DEFAULT 1
+                                )
+                            `, (err) => {
+                                if (err) {
+                                    console.error('Error creating companies table:', err);
+                                    reject(err);
+                                    return;
+                                }
+                                console.log('Companies table created/verified');
+                                tablesCreated++;
+                                
+                                if (tablesCreated === totalTables) {
+                                    console.log('All database tables initialized successfully');
+                                    resolve();
+                                }
+                            });
 
-                        // Storm events table
-                        this.db.run(`
-                            CREATE TABLE IF NOT EXISTS storm_events (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                state TEXT NOT NULL,
-                                event_data TEXT NOT NULL,
-                                severity TEXT NOT NULL,
-                                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                            )
-                        `, (err) => {
-                            if (err) {
-                                console.error('Error creating storm_events table:', err);
-                                reject(err);
-                                return;
-                            }
-                            console.log('Storm events table created/verified');
-                            tablesCreated++;
-                            
-                            if (tablesCreated === totalTables) {
-                                console.log('All database tables initialized successfully');
-                                resolve();
-                            }
-                        });
+                            // Storm events table
+                            this.db.run(`
+                                CREATE TABLE IF NOT EXISTS storm_events (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    state TEXT NOT NULL,
+                                    event_data TEXT NOT NULL,
+                                    severity TEXT NOT NULL,
+                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                                )
+                            `, (err) => {
+                                if (err) {
+                                    console.error('Error creating storm_events table:', err);
+                                    reject(err);
+                                    return;
+                                }
+                                console.log('Storm events table created/verified');
+                                tablesCreated++;
+                                
+                                if (tablesCreated === totalTables) {
+                                    console.log('All database tables initialized successfully');
+                                    resolve();
+                                }
+                            });
 
-                        // Unsubscribes table
-                        this.db.run(`
-                            CREATE TABLE IF NOT EXISTS unsubscribes (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                email TEXT NOT NULL,
-                                zip_codes TEXT,
-                                unsubscribe_token TEXT UNIQUE,
-                                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                all_alerts BOOLEAN DEFAULT FALSE
-                            )
-                        `, (err) => {
-                            if (err) {
-                                console.error('Error creating unsubscribes table:', err);
-                                reject(err);
-                                return;
-                            }
-                            console.log('Unsubscribes table created/verified');
-                            tablesCreated++;
-                            
-                            if (tablesCreated === totalTables) {
-                                console.log('All database tables initialized successfully');
-                                resolve();
-                            }
-                        });
+                            // Unsubscribes table
+                            this.db.run(`
+                                CREATE TABLE IF NOT EXISTS unsubscribes (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    email TEXT NOT NULL,
+                                    zip_codes TEXT,
+                                    unsubscribe_token TEXT UNIQUE,
+                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                    all_alerts BOOLEAN DEFAULT FALSE
+                                )
+                            `, (err) => {
+                                if (err) {
+                                    console.error('Error creating unsubscribes table:', err);
+                                    reject(err);
+                                    return;
+                                }
+                                console.log('Unsubscribes table created/verified');
+                                tablesCreated++;
+                                
+                                if (tablesCreated === totalTables) {
+                                    console.log('All database tables initialized successfully');
+                                    resolve();
+                                }
+                            });
 
-                        // Remove duplicate emails after tables are created
-                        this.db.run(`
-                            DELETE FROM companies 
-                            WHERE id NOT IN (
-                                SELECT MAX(id) 
-                                FROM companies 
-                                GROUP BY email
-                            )
-                        `, (err) => {
-                            if (err) {
-                                console.error('Error removing duplicate emails:', err);
-                                // Don't reject here, just log the error
-                            } else {
-                                console.log('Duplicate emails cleaned up');
-                            }
+                            // Remove duplicate emails after tables are created
+                            this.db.run(`
+                                DELETE FROM companies 
+                                WHERE id NOT IN (
+                                    SELECT MAX(id) 
+                                    FROM companies 
+                                    GROUP BY email
+                                )
+                            `, (err) => {
+                                if (err) {
+                                    console.error('Error removing duplicate emails:', err);
+                                    // Don't reject here, just log the error
+                                } else {
+                                    console.log('Duplicate emails cleaned up');
+                                }
+                            });
                         });
                     });
                 });
