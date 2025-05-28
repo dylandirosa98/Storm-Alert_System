@@ -19,10 +19,28 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // Initialize services
-const db = new Database();
-const weatherService = new WeatherService();
-const emailService = new EmailService();
-const stormAnalyzer = new StormAnalyzer();
+let db, weatherService, emailService, stormAnalyzer;
+
+// Initialize database and services
+async function initializeServices() {
+    try {
+        db = new Database();
+        await db.initialize();
+        console.log('Database connection initialized successfully');
+        
+        weatherService = new WeatherService();
+        emailService = new EmailService();
+        stormAnalyzer = new StormAnalyzer();
+        
+        // Initialize database tables
+        initializeDatabase();
+        
+        console.log('All services initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize services:', error);
+        throw error;
+    }
+}
 
 // Serve landing page
 app.get('/', (req, res) => {
@@ -99,7 +117,20 @@ app.post('/api/subscribe', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date() });
+    const healthStatus = {
+        status: 'healthy',
+        timestamp: new Date(),
+        services: {
+            database: db ? 'initialized' : 'not initialized',
+            weatherService: weatherService ? 'initialized' : 'not initialized',
+            emailService: emailService ? 'initialized' : 'not initialized',
+            stormAnalyzer: stormAnalyzer ? 'initialized' : 'not initialized'
+        },
+        environment: process.env.NODE_ENV || 'development',
+        port: PORT
+    };
+    
+    res.json(healthStatus);
 });
 
 // Test storm check endpoint
@@ -544,121 +575,131 @@ async function checkForStormsAndAlert() {
 // Start server function
 async function startServer() {
     try {
-        // Initialize database first
-        await db.initialize();
-        console.log('Database connection initialized successfully');
+        console.log('Starting Storm Alert System...');
+        console.log('Environment:', process.env.NODE_ENV || 'development');
+        console.log('Port:', PORT);
         
-        // Initialize database tables
-        initializeDatabase();
+        // Initialize all services first
+        await initializeServices();
 
         // Start the server
-        app.listen(PORT, () => {
-            console.log(`Storm Alert System running on http://localhost:${PORT}`);
+        const server = app.listen(PORT, '0.0.0.0', () => {
+            console.log(`Storm Alert System running on port ${PORT}`);
+            console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
         });
 
-        // Set up cron job
-        cron.schedule('0 */2 * * *', async () => {
-            const startTime = new Date();
-            console.log(`\n🕐 ========== STORM CHECK STARTED: ${startTime.toLocaleString()} ==========`);
-            
-            try {
-                // Initialize database if needed
-                if (!db.isInitialized) {
-                    console.log('📊 Initializing database...');
-                    await db.initialize();
-                }
-                
-                const subscribedStates = await db.getSubscribedStates();
-                console.log(`📍 Checking ${subscribedStates.length} subscribed states: ${subscribedStates.join(', ')}`);
-                
-                let totalAlertsFound = 0;
-                let totalEmailsSent = 0;
-                let statesWithAlerts = [];
-                
-                for (const state of subscribedStates) {
-                    console.log(`\n🌍 Checking ${state} for weather alerts...`);
-                    
-                    try {
-                        const alerts = await weatherService.getComprehensiveWeatherAlerts(state);
-                        console.log(`📋 Found ${alerts ? alerts.length : 0} total alerts in ${state} (active + recent)`);
-                        
-                        if (alerts && alerts.length > 0) {
-                            totalAlertsFound += alerts.length;
-                            statesWithAlerts.push(`${state} (${alerts.length})`);
-                            
-                            console.log(`🔍 Analyzing storms in ${state}...`);
-                            const stormData = await stormAnalyzer.analyzeStorms(alerts);
-                            
-                            if (stormData.worthCanvassing) {
-                                console.log(`🚨 SEVERE WEATHER DETECTED in ${state}! Sending alerts...`);
-                                
-                                const companies = await db.getCompaniesByState(state);
-                                console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
-                                
-                                for (const company of companies) {
-                                    try {
-                                        console.log(`📤 Sending alert to ${company.companyName} (${company.email})`);
-                                        await emailService.sendStormAlert(company, stormData);
-                                        totalEmailsSent++;
-                                        console.log(`✅ Email sent successfully to ${company.companyName}`);
-                                    } catch (emailError) {
-                                        console.error(`❌ Failed to send email to ${company.companyName}:`, emailError.message);
-                                    }
-                                }
-                                
-                                // Log the storm event
-                                try {
-                                    await db.logStormEvent(state, stormData);
-                                    console.log(`📝 Storm event logged for ${state}`);
-                                } catch (logError) {
-                                    console.error(`❌ Failed to log storm event for ${state}:`, logError.message);
-                                }
-                            } else {
-                                console.log(`ℹ️ Alerts found in ${state} but not severe enough for email notifications`);
-                            }
-                        } else {
-                            console.log(`✅ No alerts in ${state} - all clear`);
-                        }
-                    } catch (stateError) {
-                        console.error(`❌ Error checking ${state}:`, stateError.message);
-                        if (stateError.response) {
-                            console.error(`   Response status: ${stateError.response.status}`);
-                            console.error(`   Response data:`, stateError.response.data);
-                        }
-                    }
-                    
-                    // Small delay between states to be respectful to the API
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-                
-                const endTime = new Date();
-                const duration = Math.round((endTime - startTime) / 1000);
-                
-                console.log(`\n📊 ========== STORM CHECK COMPLETE ==========`);
-                console.log(`⏱️ Duration: ${duration} seconds`);
-                console.log(`📍 States checked: ${subscribedStates.length}`);
-                console.log(`⚡ Total alerts found: ${totalAlertsFound}`);
-                console.log(`📧 Emails sent: ${totalEmailsSent}`);
-                console.log(`🌩️ States with alerts: ${statesWithAlerts.length > 0 ? statesWithAlerts.join(', ') : 'None'}`);
-                console.log(`🕐 Next check at: ${new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleString()}`);
-                console.log(`================================================\n`);
-                
-            } catch (error) {
-                console.error('❌ CRITICAL ERROR in storm check:', error);
-                console.error('Stack trace:', error.stack);
-                
-                // Try to notify admin of the error
-                try {
-                    // You could add admin notification here if needed
-                    console.log('🔄 Storm check will retry in 2 hours...');
-                } catch (notifyError) {
-                    console.error('Failed to notify admin of error:', notifyError.message);
-                }
+        // Handle server errors
+        server.on('error', (error) => {
+            if (error.code === 'EADDRINUSE') {
+                console.error(`Port ${PORT} is already in use. Trying to find an available port...`);
+                // Try a different port
+                const alternatePort = PORT + 1;
+                server.listen(alternatePort, '0.0.0.0', () => {
+                    console.log(`Storm Alert System running on alternate port ${alternatePort}`);
+                });
+            } else {
+                console.error('Server error:', error);
+                throw error;
             }
         });
+
+        // Set up cron job only in production
+        if (process.env.NODE_ENV === 'production') {
+            console.log('Setting up production cron job...');
+            cron.schedule('0 */2 * * *', async () => {
+                await runStormCheck();
+            });
+        } else {
+            console.log('Development mode - cron job disabled');
+        }
+
     } catch (error) {
         console.error('Failed to start server:', error);
+        console.error('Stack trace:', error.stack);
         process.exit(1);
+    }
+}
+
+// Separate function for storm checking
+async function runStormCheck() {
+    const startTime = new Date();
+    console.log(`\n🕐 ========== STORM CHECK STARTED: ${startTime.toLocaleString()} ==========`);
+    
+    try {
+        const subscribedStates = await db.getSubscribedStates();
+        console.log(`📍 Checking ${subscribedStates.length} subscribed states: ${subscribedStates.join(', ')}`);
+        
+        let totalAlertsFound = 0;
+        let totalEmailsSent = 0;
+        let statesWithAlerts = [];
+        
+        for (const state of subscribedStates) {
+            console.log(`\n🌍 Checking ${state} for weather alerts...`);
+            
+            try {
+                const alerts = await weatherService.getComprehensiveWeatherAlerts(state);
+                console.log(`📋 Found ${alerts ? alerts.length : 0} total alerts in ${state} (active + recent)`);
+                
+                if (alerts && alerts.length > 0) {
+                    totalAlertsFound += alerts.length;
+                    statesWithAlerts.push(`${state} (${alerts.length})`);
+                    
+                    console.log(`🔍 Analyzing storms in ${state}...`);
+                    const stormData = await stormAnalyzer.analyzeStorms(alerts);
+                    
+                    if (stormData.worthCanvassing) {
+                        console.log(`🚨 SEVERE WEATHER DETECTED in ${state}! Sending alerts...`);
+                        
+                        const companies = await db.getCompaniesByState(state);
+                        console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
+                
+                for (const company of companies) {
+                            try {
+                                console.log(`📤 Sending alert to ${company.companyName} (${company.email})`);
+                    await emailService.sendStormAlert(company, stormData);
+                                totalEmailsSent++;
+                                console.log(`✅ Email sent successfully to ${company.companyName}`);
+                            } catch (emailError) {
+                                console.error(`❌ Failed to send email to ${company.companyName}:`, emailError.message);
+                            }
+                        }
+                        
+                        // Log the storm event
+                        try {
+                            await db.logStormEvent(state, stormData);
+                            console.log(`📝 Storm event logged for ${state}`);
+                        } catch (logError) {
+                            console.error(`❌ Failed to log storm event for ${state}:`, logError.message);
+                        }
+                    } else {
+                        console.log(`ℹ️ Alerts found in ${state} but not severe enough for email notifications`);
+                    }
+                } else {
+                    console.log(`✅ No alerts in ${state} - all clear`);
+                }
+            } catch (stateError) {
+                console.error(`❌ Error checking ${state}:`, stateError.message);
+            }
+            
+            // Small delay between states to be respectful to the API
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        const endTime = new Date();
+        const duration = Math.round((endTime - startTime) / 1000);
+        
+        console.log(`\n📊 ========== STORM CHECK COMPLETE ==========`);
+        console.log(`⏱️ Duration: ${duration} seconds`);
+        console.log(`📍 States checked: ${subscribedStates.length}`);
+        console.log(`⚡ Total alerts found: ${totalAlertsFound}`);
+        console.log(`📧 Emails sent: ${totalEmailsSent}`);
+        console.log(`🌩️ States with alerts: ${statesWithAlerts.length > 0 ? statesWithAlerts.join(', ') : 'None'}`);
+        console.log(`🕐 Next check at: ${new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleString()}`);
+        console.log(`================================================\n`);
+        
+    } catch (error) {
+        console.error('❌ CRITICAL ERROR in storm check:', error);
+        console.error('Stack trace:', error.stack);
     }
 }
 
