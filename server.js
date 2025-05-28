@@ -166,6 +166,8 @@ app.post('/api/send-test-email', async (req, res) => {
 
 // Initialize database
 function initializeDatabase() {
+    console.log('Initializing database tables...');
+    
     // Create companies table
     db.run(`CREATE TABLE IF NOT EXISTS companies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,7 +177,13 @@ function initializeDatabase() {
         phone TEXT,
         states TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+    )`, (err) => {
+        if (err) {
+            console.error('Error creating companies table:', err);
+        } else {
+            console.log('Companies table created/verified successfully');
+        }
+    });
 
     // Create unsubscribes table
     db.run(`CREATE TABLE IF NOT EXISTS unsubscribes (
@@ -185,16 +193,25 @@ function initializeDatabase() {
         unsubscribe_token TEXT UNIQUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         all_alerts BOOLEAN DEFAULT FALSE
-    )`);
+    )`, (err) => {
+        if (err) {
+            console.error('Error creating unsubscribes table:', err);
+        } else {
+            console.log('Unsubscribes table created/verified successfully');
+        }
+    });
 
-    console.log('Database initialized successfully');
+    console.log('Database initialization complete');
 }
 
 // Unsubscribe endpoint - make sure it matches the URL exactly
 app.get('/api/unsubscribe', async (req, res) => {
     const { token, email } = req.query;
     
+    console.log('Unsubscribe request received:', { token: token ? 'present' : 'missing', email });
+    
     if (!token || !email) {
+        console.log('Missing token or email in unsubscribe request');
         return res.status(400).send(`
             <html>
                 <head>
@@ -230,15 +247,23 @@ app.get('/api/unsubscribe', async (req, res) => {
     }
 
     try {
+        console.log('Checking if email exists in companies table:', email);
+        
         // First check if the email exists in the companies table
         const company = await new Promise((resolve, reject) => {
             db.get('SELECT * FROM companies WHERE email = ?', [email], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
+                if (err) {
+                    console.error('Database error checking company:', err);
+                    reject(err);
+                } else {
+                    console.log('Company lookup result:', row ? 'found' : 'not found');
+                    resolve(row);
+                }
             });
         });
 
         if (!company) {
+            console.log('Email not found in companies table:', email);
             return res.status(404).send(`
                 <html>
                     <head>
@@ -273,6 +298,8 @@ app.get('/api/unsubscribe', async (req, res) => {
             `);
         }
 
+        console.log('Adding unsubscribe record for:', email);
+        
         // Insert or update the unsubscribe record
         await new Promise((resolve, reject) => {
             db.run(
@@ -280,17 +307,29 @@ app.get('/api/unsubscribe', async (req, res) => {
                  VALUES (?, ?, ?, datetime('now'))`,
                 [email, token, true],
                 function(err) {
-                    if (err) reject(err);
-                    resolve(this);
+                    if (err) {
+                        console.error('Database error inserting unsubscribe record:', err);
+                        reject(err);
+                    } else {
+                        console.log('Unsubscribe record inserted successfully');
+                        resolve(this);
+                    }
                 }
             );
         });
 
+        console.log('Deleting company record for:', email);
+        
         // Delete the company record
         await new Promise((resolve, reject) => {
             db.run('DELETE FROM companies WHERE email = ?', [email], function(err) {
-                if (err) reject(err);
-                resolve(this);
+                if (err) {
+                    console.error('Database error deleting company record:', err);
+                    reject(err);
+                } else {
+                    console.log('Company record deleted successfully, rows affected:', this.changes);
+                    resolve(this);
+                }
             });
         });
 
@@ -349,6 +388,7 @@ app.get('/api/unsubscribe', async (req, res) => {
         `);
     } catch (error) {
         console.error('Error processing unsubscribe:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).send(`
             <html>
                 <head>
@@ -376,6 +416,7 @@ app.get('/api/unsubscribe', async (req, res) => {
                     <div class="error-container">
                         <h2>❌ Error Processing Unsubscribe</h2>
                         <p>There was an error processing your unsubscribe request.</p>
+                        <p><small>Error: ${error.message}</small></p>
                     </div>
                     <p>Please try again later or contact support if the problem persists.</p>
                 </body>
@@ -505,7 +546,10 @@ async function startServer() {
     try {
         // Initialize database first
         await db.initialize();
-        console.log('Database initialized successfully');
+        console.log('Database connection initialized successfully');
+        
+        // Initialize database tables
+        initializeDatabase();
 
         // Start the server
         app.listen(PORT, () => {
