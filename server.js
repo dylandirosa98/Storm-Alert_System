@@ -26,21 +26,12 @@ async function initializeServices() {
     try {
         console.log('🔧 Initializing database...');
         
-        // Ensure we have a clean database instance
-        if (db) {
-            console.log('Cleaning up existing database connection...');
-            try {
-                await db.close();
-            } catch (closeError) {
-                console.log('Note: Error closing existing database (this is usually fine):', closeError.message);
-            }
-        }
-        
+        // Create a fresh database instance
         db = new Database();
         await db.initialize();
         console.log('✅ Database connection initialized successfully');
         
-        // Verify database is working
+        // Verify database is working by testing a simple query
         try {
             const testStates = await db.getSubscribedStates();
             console.log(`✅ Database verification successful - found ${testStates.length} subscribed states`);
@@ -49,7 +40,7 @@ async function initializeServices() {
             throw new Error('Database initialization verification failed');
         }
         
-        console.log('🔧 Initializing services...');
+        console.log('🔧 Initializing other services...');
         weatherService = new WeatherService();
         emailService = new EmailService();
         stormAnalyzer = new StormAnalyzer();
@@ -603,31 +594,57 @@ async function runStormCheck() {
                     statesWithAlerts.push(`${state} (${alerts.length})`);
                     
                     console.log(`🔍 Analyzing storms in ${state}...`);
-                    const stormData = await stormAnalyzer.analyzeStorms(alerts);
+                    const stormDataArray = await stormAnalyzer.analyzeStorms(alerts);
                     
-                    if (stormData.worthCanvassing) {
-                        console.log(`🚨 SEVERE WEATHER DETECTED in ${state}! Sending alerts...`);
+                    if (stormDataArray && stormDataArray.length > 0) {
+                        console.log(`🚨 SEVERE WEATHER DETECTED in ${state}! Found ${stormDataArray.length} qualifying storms. Sending alerts...`);
                         
                         const companies = await db.getCompaniesByState(state);
                         console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
-                
-                for (const company of companies) {
+                        
+                        // Filter out unsubscribed users
+                        const activeCompanies = [];
+                        for (const company of companies) {
                             try {
-                                console.log(`📤 Sending alert to ${company.companyName} (${company.email})`);
-                    await emailService.sendStormAlert(company, stormData);
-                                totalEmailsSent++;
-                                console.log(`✅ Email sent successfully to ${company.companyName}`);
-                            } catch (emailError) {
-                                console.error(`❌ Failed to send email to ${company.companyName}:`, emailError.message);
+                                const unsubscribed = await db.isUnsubscribed(company.email);
+                                if (!unsubscribed) {
+                                    activeCompanies.push(company);
+                                } else {
+                                    console.log(`🚫 Skipping unsubscribed user: ${company.email}`);
+                                }
+                            } catch (error) {
+                                console.error(`❌ Error checking unsubscribe status for ${company.email}:`, error);
+                                // Include the company if we can't check status (fail safe)
+                                activeCompanies.push(company);
                             }
                         }
                         
-                        // Log the storm event
-                        try {
-                            await db.logStormEvent(state, stormData);
-                            console.log(`📝 Storm event logged for ${state}`);
-                        } catch (logError) {
-                            console.error(`❌ Failed to log storm event for ${state}:`, logError.message);
+                        if (activeCompanies.length > 0) {
+                            console.log(`📤 Sending alerts to ${activeCompanies.length} active subscribers`);
+                            
+                            // Send each storm alert
+                            for (const stormData of stormDataArray) {
+                                try {
+                                    console.log(`📧 Sending storm alert for ${stormData.details[0].type} in ${stormData.affectedAreas[0].description}`);
+                                    const result = await emailService.sendStormAlert(stormData, activeCompanies);
+                                    totalEmailsSent += activeCompanies.length;
+                                    console.log(`✅ Storm alert sent successfully to ${activeCompanies.length} companies`);
+                                } catch (emailError) {
+                                    console.error(`❌ Failed to send storm alert:`, emailError.message);
+                                }
+                            }
+                            
+                            // Log the storm events
+                            for (const stormData of stormDataArray) {
+                                try {
+                                    await db.logStormEvent(state, stormData);
+                                    console.log(`📝 Storm event logged for ${state}`);
+                                } catch (logError) {
+                                    console.error(`❌ Failed to log storm event for ${state}:`, logError.message);
+                                }
+                            }
+                        } else {
+                            console.log(`📭 No active subscribers for ${state} (all unsubscribed)`);
                         }
                     } else {
                         console.log(`ℹ️ Alerts found in ${state} but not severe enough for email notifications`);
