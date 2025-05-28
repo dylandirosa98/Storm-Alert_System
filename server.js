@@ -122,6 +122,48 @@ app.get('/api/test-storm-check', async (req, res) => {
     res.json({ message: 'Comprehensive check complete - see server console' });
 });
 
+// Test email endpoint
+app.post('/api/send-test-email', async (req, res) => {
+    try {
+        const testStormData = {
+            severity: 'HIGH',
+            worthCanvassing: true,
+            details: [{
+                type: 'Severe Thunderstorm',
+                severityScore: 8,
+                hailSize: 1.5,
+                windSpeed: 65,
+                areas: 'Dallas-Fort Worth Metroplex',
+                zipCodes: ['75001', '75002', '75003'],
+                damageEstimate: {
+                    potentialJobs: 150,
+                    avgJobValue: 9000,
+                    totalMarketValue: 1350000
+                }
+            }],
+            recommendations: [
+                '🚨 Deploy assessment teams immediately',
+                '📸 Document all visible damage',
+                '📱 Contact insurance adjusters',
+                '🏠 Prepare emergency repair materials'
+            ]
+        };
+
+        const testCompany = {
+            company_name: req.body.companyName || 'Test Roofing Company',
+            email: req.body.email || 'dylandirosa980@gmail.com',
+            states: ['TX', 'FL']
+        };
+
+        console.log('Sending test email to:', testCompany.email);
+        const result = await emailService.sendStormAlert(testStormData, [testCompany]);
+        res.json({ success: true, message: 'Test email sent successfully', result });
+    } catch (error) {
+        console.error('Error sending test email:', error);
+        res.status(500).json({ error: 'Failed to send test email', details: error.message });
+    }
+});
+
 // Initialize database
 function initializeDatabase() {
     // Create companies table
