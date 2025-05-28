@@ -149,58 +149,197 @@ function initializeDatabase() {
 }
 
 // Unsubscribe endpoint
-app.get('/unsubscribe', (req, res) => {
+app.get('/unsubscribe', async (req, res) => {
     const { token, email } = req.query;
     
     if (!token || !email) {
         return res.status(400).send(`
             <html>
-                <head><title>Invalid Unsubscribe Link</title></head>
-                <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-                    <h2 style="color: #e74c3c;">Invalid Unsubscribe Link</h2>
-                    <p>The unsubscribe link is invalid or expired.</p>
+                <head>
+                    <title>Invalid Unsubscribe Link</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            max-width: 600px;
+                            margin: 50px auto;
+                            padding: 20px;
+                            text-align: center;
+                            line-height: 1.6;
+                        }
+                        .error-container {
+                            background: #fee;
+                            border: 1px solid #fcc;
+                            border-radius: 8px;
+                            padding: 20px;
+                            margin-bottom: 20px;
+                        }
+                        h2 { color: #e74c3c; }
+                    </style>
+                </head>
+                <body>
+                    <div class="error-container">
+                        <h2>❌ Invalid Unsubscribe Link</h2>
+                        <p>The unsubscribe link appears to be invalid or expired.</p>
+                    </div>
+                    <p>If you continue to receive unwanted emails, please contact support.</p>
                 </body>
             </html>
         `);
     }
 
-    // For now, we'll do a simple unsubscribe from all alerts
-    // In a production system, you'd validate the token more securely
-    db.run(
-        `INSERT OR REPLACE INTO unsubscribes (email, all_alerts, unsubscribe_token) VALUES (?, ?, ?)`,
-        [email, true, token],
-        function(err) {
-            if (err) {
-                console.error('Error processing unsubscribe:', err);
-                return res.status(500).send(`
-                    <html>
-                        <head><title>Unsubscribe Error</title></head>
-                        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-                            <h2 style="color: #e74c3c;">Error Processing Unsubscribe</h2>
-                            <p>There was an error processing your unsubscribe request. Please try again later.</p>
-                        </body>
-                    </html>
-                `);
-            }
+    try {
+        // First check if the email exists in the companies table
+        const company = await new Promise((resolve, reject) => {
+            db.get('SELECT * FROM companies WHERE email = ?', [email], (err, row) => {
+                if (err) reject(err);
+                resolve(row);
+            });
+        });
 
-            console.log(`✅ User unsubscribed: ${email}`);
-            res.send(`
+        if (!company) {
+            return res.status(404).send(`
                 <html>
-                    <head><title>Successfully Unsubscribed</title></head>
-                    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center;">
-                        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; padding: 20px; margin-bottom: 20px;">
-                            <h2 style="color: #155724; margin: 0;">✅ Successfully Unsubscribed</h2>
+                    <head>
+                        <title>Email Not Found</title>
+                        <style>
+                            body {
+                                font-family: Arial, sans-serif;
+                                max-width: 600px;
+                                margin: 50px auto;
+                                padding: 20px;
+                                text-align: center;
+                                line-height: 1.6;
+                            }
+                            .warning-container {
+                                background: #fff3cd;
+                                border: 1px solid #ffeeba;
+                                border-radius: 8px;
+                                padding: 20px;
+                                margin-bottom: 20px;
+                            }
+                            h2 { color: #856404; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="warning-container">
+                            <h2>⚠️ Email Not Found</h2>
+                            <p>The email address ${email} is not registered in our system.</p>
                         </div>
-                        <p>You have been successfully unsubscribed from storm alerts.</p>
-                        <p>Email: <strong>${email}</strong></p>
-                        <p style="color: #6c757d; font-size: 14px; margin-top: 30px;">
-                            If you change your mind, you can always resubscribe by visiting our registration page.
-                        </p>
+                        <p>If you believe this is an error, please contact support.</p>
                     </body>
                 </html>
             `);
         }
-    );
+
+        // Insert or update the unsubscribe record
+        await new Promise((resolve, reject) => {
+            db.run(
+                `INSERT OR REPLACE INTO unsubscribes (email, unsubscribe_token, all_alerts, created_at) 
+                 VALUES (?, ?, ?, datetime('now'))`,
+                [email, token, true],
+                function(err) {
+                    if (err) reject(err);
+                    resolve(this);
+                }
+            );
+        });
+
+        // Delete the company record
+        await new Promise((resolve, reject) => {
+            db.run('DELETE FROM companies WHERE email = ?', [email], function(err) {
+                if (err) reject(err);
+                resolve(this);
+            });
+        });
+
+        console.log(`✅ User unsubscribed successfully: ${email}`);
+        
+        res.send(`
+            <html>
+                <head>
+                    <title>Successfully Unsubscribed</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            max-width: 600px;
+                            margin: 50px auto;
+                            padding: 20px;
+                            text-align: center;
+                            line-height: 1.6;
+                        }
+                        .success-container {
+                            background: #d4edda;
+                            border: 1px solid #c3e6cb;
+                            border-radius: 8px;
+                            padding: 20px;
+                            margin-bottom: 20px;
+                        }
+                        h2 { color: #155724; }
+                        .email { 
+                            background: #f8f9fa;
+                            padding: 10px;
+                            border-radius: 4px;
+                            display: inline-block;
+                            margin: 10px 0;
+                        }
+                        .resubscribe-note {
+                            color: #6c757d;
+                            font-size: 14px;
+                            margin-top: 30px;
+                            padding: 15px;
+                            background: #f8f9fa;
+                            border-radius: 8px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="success-container">
+                        <h2>✅ Successfully Unsubscribed</h2>
+                        <p>You have been successfully unsubscribed from storm alerts.</p>
+                    </div>
+                    <p>Email: <span class="email"><strong>${email}</strong></span></p>
+                    <div class="resubscribe-note">
+                        <p>If you change your mind, you can always resubscribe by visiting our registration page.</p>
+                        <p>We're sorry to see you go!</p>
+                    </div>
+                </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Error processing unsubscribe:', error);
+        res.status(500).send(`
+            <html>
+                <head>
+                    <title>Unsubscribe Error</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            max-width: 600px;
+                            margin: 50px auto;
+                            padding: 20px;
+                            text-align: center;
+                            line-height: 1.6;
+                        }
+                        .error-container {
+                            background: #fee;
+                            border: 1px solid #fcc;
+                            border-radius: 8px;
+                            padding: 20px;
+                            margin-bottom: 20px;
+                        }
+                        h2 { color: #e74c3c; }
+                    </style>
+                </head>
+                <body>
+                    <div class="error-container">
+                        <h2>❌ Error Processing Unsubscribe</h2>
+                        <p>There was an error processing your unsubscribe request.</p>
+                    </div>
+                    <p>Please try again later or contact support if the problem persists.</p>
+                </body>
+            </html>
+        `);
+    }
 });
 
 // Function to check if user is unsubscribed
