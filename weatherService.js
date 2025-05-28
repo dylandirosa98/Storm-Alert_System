@@ -1,4 +1,5 @@
 const axios = require('axios');
+const StormAnalyzer = require('./stormAnalyzer');
 
 class WeatherService {
     constructor() {
