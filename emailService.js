@@ -46,14 +46,19 @@ class EmailService {
     }
 
     generateUnsubscribeToken(email, zipCodes) {
+        // Create a unique token based on email, zip codes, and timestamp
         const data = `${email}:${JSON.stringify(zipCodes)}:${Date.now()}`;
         return crypto.createHash('sha256').update(data).digest('hex');
     }
 
     generateUnsubscribeUrl(email, zipCodes) {
         const token = this.generateUnsubscribeToken(email, zipCodes);
+        // Use the Railway deployment URL
         const baseUrl = process.env.BASE_URL || 'https://storm-alert-system-production.up.railway.app';
-        return `${baseUrl}/unsubscribe?token=${token}&email=${encodeURIComponent(email)}`;
+        console.log('Base URL for unsubscribe:', baseUrl);
+        const unsubscribeUrl = `${baseUrl}/unsubscribe?token=${token}&email=${encodeURIComponent(email)}`;
+        console.log('Generated unsubscribe URL:', unsubscribeUrl);
+        return unsubscribeUrl;
     }
 
     getSeverityText(severityScore) {
