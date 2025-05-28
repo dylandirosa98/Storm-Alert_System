@@ -1,5 +1,5 @@
 class StormAnalyzer {
-    analyzeStorms(alerts) {
+    analyzeStorms(alerts, state) {
         console.log(`\n🔍 Storm Analyzer: Processing ${alerts.length} alerts for roofing damage potential`);
         console.log(`📋 Criteria:`);
         console.log(`   • Hail ≥ 1.0 inch`);
@@ -15,6 +15,12 @@ class StormAnalyzer {
             console.log(`\n🌩️ Analyzing Alert:`);
             console.log(`   Type: ${event}`);
             console.log(`   Area: ${areaDesc}`);
+
+            // Extract zip codes from the alert
+            const zipCodes = alert.properties.geocode?.SAME || 
+                           alert.properties.geocode?.UGC || 
+                           this.extractZipCodesFromDescription(description) || 
+                           [];
 
             const hailSizeMatch = description.match(/([0-9.]+)\s?(inch|inches)/i);
             const hailSize = hailSizeMatch ? parseFloat(hailSizeMatch[1]) : 0;
@@ -62,9 +68,10 @@ class StormAnalyzer {
 
             results.push({
                 severity: severity.toLowerCase(),
+                state: state, // Include the state in the storm data
                 affectedAreas: [{
                     description: areaDesc,
-                    zipCodes: alert.properties.geocode?.UGC || []
+                    zipCodes: zipCodes
                 }],
                 worthCanvassing,
                 details: [{
@@ -81,7 +88,7 @@ class StormAnalyzer {
                         avgJobValue,
                         totalMarketValue
                     },
-                    zipCodes: alert.properties.geocode?.UGC || []
+                    zipCodes: zipCodes
                 }],
                 recommendations: this.generateRecommendations({ isTornado, isHailRelevant, isWindRelevant, isHurricane })
             });
@@ -94,6 +101,12 @@ class StormAnalyzer {
         }
 
         return results;
+    }
+
+    extractZipCodesFromDescription(description) {
+        // Extract zip codes from the description text
+        const zipCodeMatches = description.match(/\b\d{5}\b/g);
+        return zipCodeMatches || [];
     }
 
     generateRecommendations({ isTornado, isHailRelevant, isWindRelevant, isHurricane }) {

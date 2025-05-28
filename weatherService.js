@@ -567,37 +567,40 @@ class WeatherService {
     }
 
     async getComprehensiveWeatherAlerts(state) {
-        console.log(`🌩️ Getting comprehensive weather data for ${state}...`);
+        console.log(`\n🌩️ Getting comprehensive weather data for ${state}...`);
         
-        // Get both active and recent historical alerts
-        const [activeAlerts, historicalAlerts] = await Promise.all([
-            this.getWeatherAlerts(state),
-            this.getRecentHistoricalAlerts(state, 2)
-        ]);
+        try {
+            // Get historical alerts first
+            console.log(`📋 Checking historical alerts for ${state} (past 2 hours)...`);
+            const historicalAlerts = await this.getRecentHistoricalAlerts(state);
+            console.log(`📊 Found ${historicalAlerts.length} historical alerts`);
 
-        // Combine and deduplicate alerts
-        const allAlerts = [...activeAlerts];
-        
-        // Add historical alerts that aren't already in active alerts
-        for (const historical of historicalAlerts) {
-            const isDuplicate = activeAlerts.some(active => 
-                active.properties.id === historical.properties.id ||
-                (active.properties.event === historical.properties.event &&
-                 active.properties.areaDesc === historical.properties.areaDesc &&
-                 Math.abs(new Date(active.properties.sent) - new Date(historical.properties.sent)) < 60000) // Within 1 minute
-            );
+            // Get current active alerts
+            console.log(`🔍 Checking current active alerts for ${state}...`);
+            const currentAlerts = await this.getWeatherAlerts(state);
+            console.log(`📊 Found ${currentAlerts.length} active alerts`);
+
+            // Combine and deduplicate alerts
+            const allAlerts = [...currentAlerts, ...historicalAlerts];
+            const uniqueAlerts = this.deduplicateAlerts(allAlerts);
+
+            console.log(`\n📊 COMPREHENSIVE RESULTS for ${state}:`);
+            console.log(`   Active alerts: ${currentAlerts.length}`);
+            console.log(`   Historical alerts: ${historicalAlerts.length}`);
+            console.log(`   Total unique alerts: ${uniqueAlerts.length}`);
+
+            // Create a StormAnalyzer instance
+            const stormAnalyzer = new StormAnalyzer();
             
-            if (!isDuplicate) {
-                allAlerts.push(historical);
-            }
+            // Pass both the alerts and the state to the analyzer
+            const stormData = stormAnalyzer.analyzeStorms(uniqueAlerts, state);
+
+            return stormData;
+
+        } catch (error) {
+            console.error(`❌ Error getting comprehensive alerts for ${state}:`, error);
+            return [];
         }
-
-        console.log(`📊 COMPREHENSIVE RESULTS for ${state}:`);
-        console.log(`   Active alerts: ${activeAlerts.length}`);
-        console.log(`   Historical alerts: ${historicalAlerts.length}`);
-        console.log(`   Total unique alerts: ${allAlerts.length}`);
-
-        return allAlerts;
     }
 }
 
