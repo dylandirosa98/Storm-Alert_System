@@ -25,9 +25,29 @@ let db, weatherService, emailService, stormAnalyzer;
 async function initializeServices() {
     try {
         console.log('🔧 Initializing database...');
+        
+        // Ensure we have a clean database instance
+        if (db) {
+            console.log('Cleaning up existing database connection...');
+            try {
+                await db.close();
+            } catch (closeError) {
+                console.log('Note: Error closing existing database (this is usually fine):', closeError.message);
+            }
+        }
+        
         db = new Database();
         await db.initialize();
         console.log('✅ Database connection initialized successfully');
+        
+        // Verify database is working
+        try {
+            const testStates = await db.getSubscribedStates();
+            console.log(`✅ Database verification successful - found ${testStates.length} subscribed states`);
+        } catch (verifyError) {
+            console.error('❌ Database verification failed:', verifyError);
+            throw new Error('Database initialization verification failed');
+        }
         
         console.log('🔧 Initializing services...');
         weatherService = new WeatherService();
