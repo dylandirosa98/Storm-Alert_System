@@ -242,17 +242,7 @@ app.get('/api/unsubscribe', async (req, res) => {
         console.log('Checking if email exists in companies table:', email);
         
         // First check if the email exists in the companies table
-        const company = await new Promise((resolve, reject) => {
-            db.get('SELECT * FROM companies WHERE email = ?', [email], (err, row) => {
-                if (err) {
-                    console.error('Database error checking company:', err);
-                    reject(err);
-                } else {
-                    console.log('Company lookup result:', row ? 'found' : 'not found');
-                    resolve(row);
-                }
-            });
-        });
+        const company = await db.getCompanyByEmail(email);
 
         if (!company) {
             console.log('Email not found in companies table:', email);
@@ -293,37 +283,14 @@ app.get('/api/unsubscribe', async (req, res) => {
         console.log('Adding unsubscribe record for:', email);
         
         // Insert or update the unsubscribe record
-        await new Promise((resolve, reject) => {
-            db.run(
-                `INSERT OR REPLACE INTO unsubscribes (email, unsubscribe_token, all_alerts, created_at) 
-                 VALUES (?, ?, ?, datetime('now'))`,
-                [email, token, true],
-                function(err) {
-                    if (err) {
-                        console.error('Database error inserting unsubscribe record:', err);
-                        reject(err);
-                    } else {
-                        console.log('Unsubscribe record inserted successfully');
-                        resolve(this);
-                    }
-                }
-            );
-        });
+        await db.addUnsubscribe(email, token);
+        console.log('Unsubscribe record inserted successfully');
 
         console.log('Deleting company record for:', email);
         
         // Delete the company record
-        await new Promise((resolve, reject) => {
-            db.run('DELETE FROM companies WHERE email = ?', [email], function(err) {
-                if (err) {
-                    console.error('Database error deleting company record:', err);
-                    reject(err);
-                } else {
-                    console.log('Company record deleted successfully, rows affected:', this.changes);
-                    resolve(this);
-                }
-            });
-        });
+        const deletedRows = await db.deleteCompany(email);
+        console.log('Company record deleted successfully, rows affected:', deletedRows);
 
         console.log(`✅ User unsubscribed successfully: ${email}`);
         
@@ -418,19 +385,13 @@ app.get('/api/unsubscribe', async (req, res) => {
 });
 
 // Function to check if user is unsubscribed
-function isUnsubscribed(email, callback) {
-    db.get(
-        `SELECT * FROM unsubscribes WHERE email = ? AND all_alerts = 1`,
-        [email],
-        (err, row) => {
-            if (err) {
-                console.error('Error checking unsubscribe status:', err);
-                callback(false); // Default to not unsubscribed on error
-            } else {
-                callback(!!row); // Return true if row exists
-            }
-        }
-    );
+async function isUnsubscribed(email) {
+    try {
+        return await db.isUnsubscribed(email);
+    } catch (error) {
+        console.error('Error checking unsubscribe status:', error);
+        return false; // Default to not unsubscribed on error
+    }
 }
 
 // Modified storm checking function to filter unsubscribed users
@@ -485,38 +446,37 @@ async function checkForStormsAndAlert() {
 
                                 // Filter out unsubscribed users
                                 const activeCompanies = [];
-                                let processedCount = 0;
 
                                 for (const company of companies) {
-                                    isUnsubscribed(company.email, (unsubscribed) => {
-                                        processedCount++;
+                                    try {
+                                        const unsubscribed = await isUnsubscribed(company.email);
                                         
                                         if (!unsubscribed) {
                                             activeCompanies.push(company);
                                         } else {
                                             console.log(`🚫 Skipping unsubscribed user: ${company.email}`);
                                         }
+                                    } catch (error) {
+                                        console.error(`❌ Error checking unsubscribe status for ${company.email}:`, error);
+                                        // Include the company if we can't check status (fail safe)
+                                        activeCompanies.push(company);
+                                    }
+                                }
 
-                                        // When all companies are processed, send alerts
-                                        if (processedCount === companies.length) {
-                                            if (activeCompanies.length > 0) {
-                                                console.log(`📤 Sending alerts to ${activeCompanies.length} active subscribers`);
-                                                
-                                                // Send alerts to each qualifying storm
-                                                for (const storm of stormAnalysis) {
-                                                    emailService.sendStormAlert(storm, activeCompanies)
-                                                        .then(result => {
-                                                            console.log(`✅ Storm alert batch completed: ${result.successCount} sent, ${result.errorCount} failed`);
-                                                        })
-                                                        .catch(error => {
-                                                            console.error('❌ Error sending storm alerts:', error);
-                                                        });
-                                                }
-                                            } else {
-                                                console.log(`📭 No active subscribers for ${state} (all unsubscribed)`);
-                                            }
+                                if (activeCompanies.length > 0) {
+                                    console.log(`📤 Sending alerts to ${activeCompanies.length} active subscribers`);
+                                    
+                                    // Send alerts to each qualifying storm
+                                    for (const storm of stormAnalysis) {
+                                        try {
+                                            const result = await emailService.sendStormAlert(storm, activeCompanies);
+                                            console.log(`✅ Storm alert batch completed: ${result.successCount} sent, ${result.errorCount} failed`);
+                                        } catch (error) {
+                                            console.error('❌ Error sending storm alerts:', error);
                                         }
-                                    });
+                                    }
+                                } else {
+                                    console.log(`📭 No active subscribers for ${state} (all unsubscribed)`);
                                 }
                             }
                         );

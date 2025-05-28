@@ -233,6 +233,61 @@ class Database {
             );
         });
     }
+
+    async getCompanyByEmail(email) {
+        return new Promise((resolve, reject) => {
+            this.db.get(
+                "SELECT * FROM companies WHERE email = ?",
+                [email],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                }
+            );
+        });
+    }
+
+    async addUnsubscribe(email, token) {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                INSERT OR REPLACE INTO unsubscribes (email, unsubscribe_token, all_alerts, created_at) 
+                VALUES (?, ?, ?, datetime('now'))
+            `);
+            
+            stmt.run(email, token, true, function(err) {
+                if (err) reject(err);
+                else resolve(this.lastID);
+            });
+            
+            stmt.finalize();
+        });
+    }
+
+    async deleteCompany(email) {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare("DELETE FROM companies WHERE email = ?");
+            
+            stmt.run(email, function(err) {
+                if (err) reject(err);
+                else resolve(this.changes);
+            });
+            
+            stmt.finalize();
+        });
+    }
+
+    async isUnsubscribed(email) {
+        return new Promise((resolve, reject) => {
+            this.db.get(
+                "SELECT * FROM unsubscribes WHERE email = ? AND all_alerts = 1",
+                [email],
+                (err, row) => {
+                    if (err) reject(err);
+                    else resolve(!!row);
+                }
+            );
+        });
+    }
 }
 
 module.exports = Database; 
