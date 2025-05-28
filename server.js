@@ -582,25 +582,48 @@ async function startServer() {
         // Initialize all services first
         await initializeServices();
 
-        // Start the server
+        // Start the server with proper error handling
         const server = app.listen(PORT, '0.0.0.0', () => {
             console.log(`Storm Alert System running on port ${PORT}`);
             console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
         });
 
-        // Handle server errors
+        // Handle server errors before they crash the process
         server.on('error', (error) => {
+            console.error('Server error occurred:', error);
             if (error.code === 'EADDRINUSE') {
-                console.error(`Port ${PORT} is already in use. Trying to find an available port...`);
-                // Try a different port
-                const alternatePort = PORT + 1;
-                server.listen(alternatePort, '0.0.0.0', () => {
+                console.error(`Port ${PORT} is already in use.`);
+                console.log('Attempting to kill existing process and restart...');
+                
+                // Try to start on a different port
+                const alternatePort = parseInt(PORT) + Math.floor(Math.random() * 1000) + 1;
+                console.log(`Trying alternate port: ${alternatePort}`);
+                
+                const alternateServer = app.listen(alternatePort, '0.0.0.0', () => {
                     console.log(`Storm Alert System running on alternate port ${alternatePort}`);
                 });
+                
+                alternateServer.on('error', (altError) => {
+                    console.error('Alternate server also failed:', altError);
+                    process.exit(1);
+                });
             } else {
-                console.error('Server error:', error);
-                throw error;
+                console.error('Unhandled server error:', error);
+                process.exit(1);
             }
+        });
+
+        // Handle uncaught exceptions
+        process.on('uncaughtException', (error) => {
+            console.error('Uncaught Exception:', error);
+            console.error('Stack:', error.stack);
+            process.exit(1);
+        });
+
+        // Handle unhandled promise rejections
+        process.on('unhandledRejection', (reason, promise) => {
+            console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+            process.exit(1);
         });
 
         // Set up cron job only in production

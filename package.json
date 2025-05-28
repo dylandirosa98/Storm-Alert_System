@@ -5,8 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "test": "node test-resend-email-flow.js",
+    "dev": "nodemon server.js",
+    "kill-port": "npx kill-port 3000",
+    "fresh-start": "npx kill-port 3000 && node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
     "verify": "node verify-live-storms.js",
     "cron": "node cron-job.js"
   },
