@@ -1,137 +1,144 @@
-const Database = require('./database');
 const EmailService = require('./emailService');
+const StormAnalyzer = require('./stormAnalyzer');
 
 async function sendDemoEmail() {
-    console.log('📧 SENDING DEMONSTRATION STORM EMAIL');
-    console.log('====================================\n');
+    console.log('🌩️ Sending demonstration storm email with professional template...');
+    
+    const emailService = new EmailService();
+    const stormAnalyzer = new StormAnalyzer();
+    
+    // Create realistic demo storm event data
+    const demoStormEvent = {
+        state: 'Alabama',
+        severity: 'high',
+        worthCanvassing: true,
+        details: [{
+            type: 'Severe Thunderstorm Warning with Large Hail',
+            severity: 'Severe',
+            areas: 'Birmingham, Hoover, Vestavia Hills, Mountain Brook, Homewood AL',
+            headline: 'Severe Thunderstorm Warning with Large Hail and Damaging Winds',
+            description: 'A severe thunderstorm capable of producing hail up to 1.75 inches in diameter and winds up to 70 mph is moving through the Birmingham metropolitan area. Expect significant roof damage to vehicles and property.',
+            severityScore: 8,
+            windSpeed: 70,
+            hailSize: 1.75,
+            damageEstimate: {
+                potentialJobs: 150,
+                avgJobValue: 9000,
+                totalMarketValue: 1350000
+            },
+            zipCodes: ['35203', '35205', '35209', '35213', '35216', '35223', '35226', '35242', '35244', '35266']
+        }],
+        recommendations: [
+            'Deploy canvassing teams to affected zip codes',
+            'Prepare for emergency tarping and restoration demand',
+            'Expect strong approval rate for hail claims',
+            'Document hail size with photos and measurements',
+            'Focus on metal surfaces and soft metals for damage evidence',
+            'Inspect for wind uplift and gutter damage',
+            'Check for missing shingles and flashing',
+            'Document wind speed from weather reports'
+        ],
+        analysis: {
+            timestamp: new Date().toISOString()
+        }
+    };
+
+    // Demo company data
+    const demoCompanies = [{
+        name: 'Demo Roofing Company',
+        email: 'dylandirosa980@gmail.com',
+        company_name: 'Demo Roofing Company'
+    }];
 
     try {
-        const db = new Database();
-        await db.initialize();
+        console.log('\n📧 Testing professional storm alert email...');
         
-        const emailService = new EmailService();
-
-        // Get companies from Alabama (where we know there are subscriptions)
-        const companies = await db.getCompaniesByState('Alabama');
-        console.log(`📧 Found ${companies.length} companies to notify in Alabama`);
+        // Test the new professional email template
+        const result = await emailService.sendStormAlert(demoStormEvent, demoCompanies);
         
-        if (companies.length === 0) {
-            // Try Texas if no Alabama companies
-            const texasCompanies = await db.getCompaniesByState('Texas');
-            console.log(`📧 Found ${texasCompanies.length} companies to notify in Texas`);
-            companies.push(...texasCompanies);
-        }
-
-        if (companies.length === 0) {
-            console.log('❌ No companies found in database to send demo email to');
-            return;
-        }
-
-        // Create a realistic storm event using our test data
-        const demoStormEvent = {
-            state: 'Alabama',
-            severity: 'moderate',
-            worthCanvassing: true,
-            details: [{
-                type: 'Flood Watch + Special Weather Statement',
-                headline: 'Flood Watch and Thunderstorm Activity in Central Alabama',
-                areas: 'Central Alabama, Birmingham Metro Area',
-                damageEstimate: {
-                    potentialJobs: 45,
-                    avgJobValue: 8500,
-                    totalMarketValue: 382500
-                }
-            }],
-            recommendations: [
-                'Monitor flood-prone areas for potential water damage',
-                'Prepare equipment for roof and siding repairs from wind damage',
-                'Contact local emergency services for road closure updates',
-                'Begin outreach to affected neighborhoods within 24-48 hours'
-            ],
-            alerts: [
-                {
-                    properties: {
-                        event: 'Flood Watch',
-                        severity: 'Moderate',
-                        areaDesc: 'Central Alabama',
-                        headline: 'Flood Watch issued for Central Alabama',
-                        description: 'Heavy rainfall expected across Central Alabama may cause flooding in low-lying areas. Residents should monitor conditions and be prepared to take action if flooding develops.',
-                        effective: new Date().toISOString(),
-                        expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours from now
-                    }
-                },
-                {
-                    properties: {
-                        event: 'Special Weather Statement',
-                        severity: 'Minor',
-                        areaDesc: 'Birmingham Metro Area',
-                        headline: 'Special Weather Statement for Birmingham Metro Area',
-                        description: 'Strong thunderstorms developing across the Birmingham metro area. These storms may produce heavy rain, frequent lightning, and gusty winds.',
-                        effective: new Date().toISOString(),
-                        expires: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() // 6 hours from now
-                    }
-                }
-            ],
-            analysis: {
-                severity: 'moderate',
-                maxSeverityScore: 7,
-                worthCanvassing: true,
-                estimatedJobs: 45,
-                alertCount: 2
-            },
-            timestamp: new Date().toISOString()
-        };
-
-        // Log this demo storm event
-        await db.logStormEvent('Alabama', demoStormEvent);
-        console.log(`📝 Logged demo storm event to database`);
-
-        // Send emails to companies (limit to first 3 for demo)
-        let emailsSent = 0;
-        let emailsAttempted = 0;
-        const companiesToEmail = companies.slice(0, 3); // Only send to first 3 companies for demo
-
-        console.log(`\n📤 Sending demo emails to ${companiesToEmail.length} companies...\n`);
-
-        for (const company of companiesToEmail) {
-            try {
-                emailsAttempted++;
-                console.log(`📤 Sending demo email to ${company.company_name} (${company.email})...`);
-                
-                await emailService.sendStormAlert(company, demoStormEvent);
-                emailsSent++;
-                console.log(`   ✅ Email sent successfully`);
-                
-                // Small delay between emails
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-            } catch (emailError) {
-                console.error(`   ❌ Failed to send email to ${company.email}:`, emailError.message);
-            }
-        }
-
-        console.log(`\n📊 DEMO EMAIL SUMMARY:`);
-        console.log(`   State: Alabama`);
-        console.log(`   Storm Type: Flood Watch + Special Weather Statement`);
-        console.log(`   Storm Severity: ${demoStormEvent.analysis.severity}`);
-        console.log(`   Alert Types: ${demoStormEvent.alerts.map(a => a.properties.event).join(', ')}`);
-        console.log(`   Emails Attempted: ${emailsAttempted}`);
-        console.log(`   Emails Sent: ${emailsSent}`);
-        console.log(`   Success Rate: ${((emailsSent / emailsAttempted) * 100).toFixed(1)}%`);
+        console.log('\n✅ Demo email sent successfully!');
+        console.log(`📊 Email Statistics:`);
+        console.log(`   • Emails sent: ${result.successCount}`);
+        console.log(`   • Emails failed: ${result.errorCount}`);
+        console.log(`   • Market value: $${emailService.formatCurrency(result.marketData.totalValue)}`);
+        console.log(`   • Estimated jobs: ${result.marketData.jobCount}`);
+        console.log(`   • Avg job value: $${result.marketData.avgJobValue.toLocaleString()}`);
         
-        if (emailsSent > 0) {
-            console.log(`\n🎉 SUCCESS: Demo storm alert emails sent!`);
-            console.log(`   This demonstrates that the email system is working correctly.`);
-            console.log(`   The system will now automatically send real emails when storms occur.`);
-        } else {
-            console.log(`\n❌ FAILURE: No demo emails were successfully sent`);
-            console.log(`   Check email configuration and try again.`);
-        }
-
+        console.log('\n🎯 Features Demonstrated:');
+        console.log('   ✅ Professional HTML email template');
+        console.log('   ✅ Dynamic variable replacement');
+        console.log('   ✅ Market opportunity calculations');
+        console.log('   ✅ Severity scoring and text generation');
+        console.log('   ✅ Unsubscribe link generation');
+        console.log('   ✅ Responsive design for mobile devices');
+        console.log('   ✅ Storm-specific recommendations');
+        console.log('   ✅ Professional branding and styling');
+        
+        console.log('\n📱 Check your email to see the professional storm alert!');
+        
     } catch (error) {
-        console.error('❌ Critical error:', error);
+        console.error('❌ Failed to send demo email:', error.message);
+        console.error('💡 Make sure your email credentials are configured in environment variables:');
+        console.error('   EMAIL_USER=your-gmail@gmail.com');
+        console.error('   EMAIL_PASS=your-app-password');
     }
 }
 
-// Run the demo email sender
-sendDemoEmail().catch(console.error); 
+// Test additional email service features
+async function testEmailFeatures() {
+    console.log('\n🧪 Testing additional email service features...');
+    
+    const emailService = new EmailService();
+    
+    // Test severity text generation
+    console.log('\n📊 Severity Text Tests:');
+    for (let score = 1; score <= 10; score++) {
+        const severityText = emailService.getSeverityText(score);
+        console.log(`   Score ${score}: ${severityText}`);
+    }
+    
+    // Test currency formatting
+    console.log('\n💰 Currency Formatting Tests:');
+    const testValues = [500, 1500, 15000, 150000, 1500000, 15000000];
+    testValues.forEach(value => {
+        const formatted = emailService.formatCurrency(value);
+        console.log(`   $${value.toLocaleString()} → $${formatted}`);
+    });
+    
+    // Test unsubscribe URL generation
+    console.log('\n🔗 Unsubscribe URL Test:');
+    const testEmail = 'test@example.com';
+    const testZipCodes = ['35203', '35205', '35209'];
+    const unsubscribeUrl = emailService.generateUnsubscribeUrl(testEmail, testZipCodes);
+    console.log(`   Email: ${testEmail}`);
+    console.log(`   Zip Codes: ${testZipCodes.join(', ')}`);
+    console.log(`   Unsubscribe URL: ${unsubscribeUrl}`);
+    
+    // Test market opportunity calculation
+    console.log('\n📈 Market Opportunity Calculation Test:');
+    const testStormData = {
+        severityScore: 8,
+        zipCodes: ['35203', '35205', '35209', '35213', '35216'],
+        hailSize: 1.5,
+        windSpeed: 65,
+        stormType: 'Severe Thunderstorm with Large Hail',
+        potentialJobs: 120,
+        avgJobValue: 8500
+    };
+    
+    const marketData = emailService.calculateMarketOpportunity(testStormData);
+    console.log(`   Input: ${testStormData.zipCodes.length} zip codes, severity ${testStormData.severityScore}`);
+    console.log(`   Output: ${marketData.jobCount} jobs, $${marketData.avgJobValue.toLocaleString()} avg, $${emailService.formatCurrency(marketData.totalValue)} total`);
+}
+
+// Run the demo
+async function runDemo() {
+    console.log('🚀 Starting Professional Storm Alert Email Demo\n');
+    
+    await testEmailFeatures();
+    await sendDemoEmail();
+    
+    console.log('\n🎉 Demo completed! Check the server logs and your email inbox.');
+}
+
+runDemo().catch(console.error); 

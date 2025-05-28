@@ -122,6 +122,203 @@ app.get('/api/test-storm-check', async (req, res) => {
     res.json({ message: 'Comprehensive check complete - see server console' });
 });
 
+// Initialize database
+function initializeDatabase() {
+    // Create companies table
+    db.run(`CREATE TABLE IF NOT EXISTS companies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_name TEXT NOT NULL,
+        contact_name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        phone TEXT,
+        states TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Create unsubscribes table
+    db.run(`CREATE TABLE IF NOT EXISTS unsubscribes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        zip_codes TEXT,
+        unsubscribe_token TEXT UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        all_alerts BOOLEAN DEFAULT FALSE
+    )`);
+
+    console.log('Database initialized successfully');
+}
+
+// Unsubscribe endpoint
+app.get('/unsubscribe', (req, res) => {
+    const { token, email } = req.query;
+    
+    if (!token || !email) {
+        return res.status(400).send(`
+            <html>
+                <head><title>Invalid Unsubscribe Link</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+                    <h2 style="color: #e74c3c;">Invalid Unsubscribe Link</h2>
+                    <p>The unsubscribe link is invalid or expired.</p>
+                </body>
+            </html>
+        `);
+    }
+
+    // For now, we'll do a simple unsubscribe from all alerts
+    // In a production system, you'd validate the token more securely
+    db.run(
+        `INSERT OR REPLACE INTO unsubscribes (email, all_alerts, unsubscribe_token) VALUES (?, ?, ?)`,
+        [email, true, token],
+        function(err) {
+            if (err) {
+                console.error('Error processing unsubscribe:', err);
+                return res.status(500).send(`
+                    <html>
+                        <head><title>Unsubscribe Error</title></head>
+                        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+                            <h2 style="color: #e74c3c;">Error Processing Unsubscribe</h2>
+                            <p>There was an error processing your unsubscribe request. Please try again later.</p>
+                        </body>
+                    </html>
+                `);
+            }
+
+            console.log(`✅ User unsubscribed: ${email}`);
+            res.send(`
+                <html>
+                    <head><title>Successfully Unsubscribed</title></head>
+                    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center;">
+                        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; padding: 20px; margin-bottom: 20px;">
+                            <h2 style="color: #155724; margin: 0;">✅ Successfully Unsubscribed</h2>
+                        </div>
+                        <p>You have been successfully unsubscribed from storm alerts.</p>
+                        <p>Email: <strong>${email}</strong></p>
+                        <p style="color: #6c757d; font-size: 14px; margin-top: 30px;">
+                            If you change your mind, you can always resubscribe by visiting our registration page.
+                        </p>
+                    </body>
+                </html>
+            `);
+        }
+    );
+});
+
+// Function to check if user is unsubscribed
+function isUnsubscribed(email, callback) {
+    db.get(
+        `SELECT * FROM unsubscribes WHERE email = ? AND all_alerts = 1`,
+        [email],
+        (err, row) => {
+            if (err) {
+                console.error('Error checking unsubscribe status:', err);
+                callback(false); // Default to not unsubscribed on error
+            } else {
+                callback(!!row); // Return true if row exists
+            }
+        }
+    );
+}
+
+// Modified storm checking function to filter unsubscribed users
+async function checkForStormsAndAlert() {
+    console.log('\n🔍 Starting comprehensive storm check...');
+    
+    // Get all subscribed states
+    db.all('SELECT DISTINCT states FROM companies', async (err, rows) => {
+        if (err) {
+            console.error('Database error:', err);
+            return;
+        }
+
+        const subscribedStates = new Set();
+        rows.forEach(row => {
+            const states = JSON.parse(row.states);
+            states.forEach(state => subscribedStates.add(state));
+        });
+
+        console.log(`📊 Checking ${subscribedStates.size} subscribed states for storms...`);
+
+        for (const state of subscribedStates) {
+            try {
+                console.log(`\n🌩️ Checking ${state} for comprehensive weather alerts...`);
+                
+                // Use comprehensive weather alerts (active + historical)
+                const alerts = await weatherService.getComprehensiveWeatherAlerts(state);
+                console.log(`📋 Found ${alerts.length} total alerts (active + recent historical) for ${state}`);
+
+                if (alerts.length > 0) {
+                    const stormAnalysis = stormAnalyzer.analyzeStorms(alerts);
+                    
+                    if (stormAnalysis.length > 0) {
+                        console.log(`⚡ ${stormAnalysis.length} qualifying storm events found in ${state}!`);
+                        
+                        // Get companies subscribed to this state
+                        db.all(
+                            'SELECT * FROM companies WHERE states LIKE ?',
+                            [`%"${state}"%`],
+                            async (err, companies) => {
+                                if (err) {
+                                    console.error('Error fetching companies:', err);
+                                    return;
+                                }
+
+                                if (companies.length === 0) {
+                                    console.log(`📭 No companies subscribed to ${state}`);
+                                    return;
+                                }
+
+                                console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
+
+                                // Filter out unsubscribed users
+                                const activeCompanies = [];
+                                let processedCount = 0;
+
+                                for (const company of companies) {
+                                    isUnsubscribed(company.email, (unsubscribed) => {
+                                        processedCount++;
+                                        
+                                        if (!unsubscribed) {
+                                            activeCompanies.push(company);
+                                        } else {
+                                            console.log(`🚫 Skipping unsubscribed user: ${company.email}`);
+                                        }
+
+                                        // When all companies are processed, send alerts
+                                        if (processedCount === companies.length) {
+                                            if (activeCompanies.length > 0) {
+                                                console.log(`📤 Sending alerts to ${activeCompanies.length} active subscribers`);
+                                                
+                                                // Send alerts to each qualifying storm
+                                                for (const storm of stormAnalysis) {
+                                                    emailService.sendStormAlert(storm, activeCompanies)
+                                                        .then(result => {
+                                                            console.log(`✅ Storm alert batch completed: ${result.successCount} sent, ${result.errorCount} failed`);
+                                                        })
+                                                        .catch(error => {
+                                                            console.error('❌ Error sending storm alerts:', error);
+                                                        });
+                                                }
+                                            } else {
+                                                console.log(`📭 No active subscribers for ${state} (all unsubscribed)`);
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                        );
+                    } else {
+                        console.log(`📊 No qualifying storms found in ${state} (filtered out by roofing criteria)`);
+                    }
+                } else {
+                    console.log(`☀️ No alerts found for ${state}`);
+                }
+            } catch (error) {
+                console.error(`❌ Error checking storms for ${state}:`, error);
+            }
+        }
+    });
+}
+
 // Start server function
 async function startServer() {
     try {
