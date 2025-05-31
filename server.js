@@ -594,7 +594,7 @@ async function runStormCheck() {
                     statesWithAlerts.push(`${state} (${alerts.length})`);
                     
                     console.log(`🔍 Analyzing storms in ${state}...`);
-                    const stormDataArray = await stormAnalyzer.analyzeStorms(alerts);
+                    const stormDataArray = await stormAnalyzer.analyzeStorms(alerts, state);
                     
                     if (stormDataArray && stormDataArray.length > 0) {
                         console.log(`🚨 SEVERE WEATHER DETECTED in ${state}! Found ${stormDataArray.length} qualifying storms. Sending alerts...`);

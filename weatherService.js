@@ -384,27 +384,22 @@ class WeatherService {
                                 console.log(`   Zone: ${zoneId}`);
                                 console.log(`   Area: ${alert.properties.areaDesc || 'Not specified'}`);
                                 
-                                // Same storm filtering as active alerts - only actual events, not warnings
+                                // Updated storm filtering - include warnings and watches for hail/wind analysis
+                                // Exclude tornado warnings per user request, but include other severe weather
                                 const isSevereEvent = (
-                                    // Actual tornado events (not warnings/watches)
-                                    (event.includes('Tornado') && !event.includes('Warning') && !event.includes('Watch')) ||
-                                    // Actual severe thunderstorm events (not warnings/watches)
-                                    (event.includes('Severe Thunderstorm') && !event.includes('Warning') && !event.includes('Watch')) ||
-                                    // Actual hail events (not warnings)
-                                    (event.includes('Hail') && !event.includes('Warning') && !event.includes('Watch')) ||
-                                    // Actual damaging wind events (not warnings)
-                                    (event.includes('High Wind') && !event.includes('Warning') && !event.includes('Watch')) ||
-                                    // Hurricane/Tropical events that are actually occurring
-                                    (event.includes('Hurricane') && !event.includes('Warning') && !event.includes('Watch')) ||
-                                    (event.includes('Tropical Storm') && !event.includes('Warning') && !event.includes('Watch')) ||
-                                    // Flash flood events (actual flooding from storms)
-                                    (event.includes('Flash Flood') && !event.includes('Warning') && !event.includes('Watch')) ||
-                                    // Check description for actual storm conditions (not warnings)
-                                    description.toLowerCase().includes('hail is falling') ||
-                                    description.toLowerCase().includes('tornado on the ground') ||
-                                    description.toLowerCase().includes('damaging winds occurring') ||
-                                    description.toLowerCase().includes('severe thunderstorm producing') ||
-                                    description.toLowerCase().includes('storm is producing')
+                                    (event.includes('Severe Thunderstorm Warning') || event.includes('Severe Thunderstorm Watch')) ||
+                                    (event.includes('High Wind Warning') || event.includes('High Wind Watch')) ||
+                                    (event.includes('Hurricane Warning') || event.includes('Hurricane Watch')) ||
+                                    (event.includes('Tropical Storm Warning') || event.includes('Tropical Storm Watch')) ||
+                                    event.includes('Hail') ||
+                                    description.toLowerCase().includes('hail') ||
+                                    description.toLowerCase().includes('damaging winds') ||
+                                    description.toLowerCase().includes('severe thunderstorm') ||
+                                    headline.toLowerCase().includes('hail') ||
+                                    headline.toLowerCase().includes('wind')
+                                ) && !(
+                                    // Exclude tornado warnings as per user request
+                                    event.includes('Tornado Warning') || event.includes('Tornado Watch')
                                 );
 
                                 // Less restrictive state checking - just check if it's in the right general area
@@ -518,20 +513,22 @@ class WeatherService {
                             (onset <= cutoffTime && expires >= new Date()) // Was active during our window
                         );
                         
-                        // Same storm filtering as active alerts - only actual events, not warnings
+                        // Updated storm filtering - include warnings and watches for hail/wind analysis
+                        // Exclude tornado warnings per user request, but include other severe weather
                         const isSevereEvent = (
-                            event.includes('Tornado') && !event.includes('Warning') && !event.includes('Watch') ||
-                            event.includes('Severe Thunderstorm') && !event.includes('Warning') && !event.includes('Watch') ||
-                            event.includes('Hail') && !event.includes('Warning') && !event.includes('Watch') ||
-                            event.includes('High Wind') && !event.includes('Warning') && !event.includes('Watch') ||
-                            event.includes('Hurricane') && !event.includes('Warning') && !event.includes('Watch') ||
-                            event.includes('Tropical Storm') && !event.includes('Warning') && !event.includes('Watch') ||
-                            event.includes('Flash Flood') && !event.includes('Warning') && !event.includes('Watch') ||
-                            description.toLowerCase().includes('hail is falling') ||
-                            description.toLowerCase().includes('tornado on the ground') ||
-                            description.toLowerCase().includes('damaging winds occurring') ||
-                            description.toLowerCase().includes('severe thunderstorm producing') ||
-                            description.toLowerCase().includes('storm is producing')
+                            (event.includes('Severe Thunderstorm Warning') || event.includes('Severe Thunderstorm Watch')) ||
+                            (event.includes('High Wind Warning') || event.includes('High Wind Watch')) ||
+                            (event.includes('Hurricane Warning') || event.includes('Hurricane Watch')) ||
+                            (event.includes('Tropical Storm Warning') || event.includes('Tropical Storm Watch')) ||
+                            event.includes('Hail') ||
+                            description.toLowerCase().includes('hail') ||
+                            description.toLowerCase().includes('damaging winds') ||
+                            description.toLowerCase().includes('severe thunderstorm') ||
+                            headline.toLowerCase().includes('hail') ||
+                            headline.toLowerCase().includes('wind')
+                        ) && !(
+                            // Exclude tornado warnings as per user request
+                            event.includes('Tornado Warning') || event.includes('Tornado Watch')
                         );
 
                         if (isSevereEvent && wasRecentlyActive) {

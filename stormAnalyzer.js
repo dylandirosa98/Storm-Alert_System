@@ -4,8 +4,8 @@ class StormAnalyzer {
         console.log(`📋 Criteria:`);
         console.log(`   • Hail ≥ 1.0 inch`);
         console.log(`   • Wind ≥ 58 mph`);
-        console.log(`   • Any Tornado event`);
-        console.log(`   • Any Hurricane event\n`);
+        console.log(`   • Any Hurricane event`);
+        console.log(`   • Tornado warnings excluded (do not trigger alerts)\n`);
 
         const results = [];
 
@@ -36,10 +36,17 @@ class StormAnalyzer {
             // Log detection results
             if (hailSize > 0) console.log(`   🧊 Hail Size: ${hailSize}" ${isHailRelevant ? '✅' : '❌'}`);
             if (windSpeed > 0) console.log(`   💨 Wind Speed: ${windSpeed} mph ${isWindRelevant ? '✅' : '❌'}`);
-            if (isTornado) console.log(`   🌪️ Tornado Event Detected ✅`);
+            if (isTornado) console.log(`   🌪️ Tornado Event Detected (excluded from alerts) ⚠️`);
             if (isHurricane) console.log(`   🌀 Hurricane Event Detected ✅`);
 
-            const worthCanvassing = isHailRelevant || isWindRelevant || isTornado || isHurricane;
+            // FIRST: Check if this is a tornado warning/watch - if so, exclude it completely
+            if (isTornado) {
+                console.log(`   ⚠️ Alert filtered out - Tornado warnings do not trigger alerts`);
+                continue;
+            }
+
+            // THEN: Check other criteria for non-tornado events
+            const worthCanvassing = isHailRelevant || isWindRelevant || isHurricane;
 
             if (!worthCanvassing) {
                 console.log(`   ❌ Alert filtered out - Does not meet roofing damage criteria`);
@@ -48,14 +55,12 @@ class StormAnalyzer {
 
             console.log(`   ✅ Alert qualifies for roofing damage notification!`);
 
-            // Calculate market opportunity
-            const potentialJobs = isTornado ? 200 : 
-                                isHurricane ? 300 :
+            // Calculate market opportunity (removed tornado calculations)
+            const potentialJobs = isHurricane ? 300 :
                                 isHailRelevant ? 100 :
                                 isWindRelevant ? 50 : 0;
 
-            const avgJobValue = isTornado ? 15000 :
-                              isHurricane ? 12000 :
+            const avgJobValue = isHurricane ? 12000 :
                               isHailRelevant ? 9000 :
                               isWindRelevant ? 7000 : 0;
 
@@ -80,7 +85,7 @@ class StormAnalyzer {
                     areas: areaDesc,
                     headline,
                     description,
-                    severityScore: (isTornado ? 10 : isHurricane ? 9 : isHailRelevant ? 8 : 7),
+                    severityScore: (isHurricane ? 9 : isHailRelevant ? 8 : 7),
                     windSpeed,
                     hailSize,
                     damageEstimate: {
@@ -90,7 +95,7 @@ class StormAnalyzer {
                     },
                     zipCodes: zipCodes
                 }],
-                recommendations: this.generateRecommendations({ isTornado, isHailRelevant, isWindRelevant, isHurricane })
+                recommendations: this.generateRecommendations({ isTornado: false, isHailRelevant, isWindRelevant, isHurricane })
             });
         }
 
@@ -114,7 +119,7 @@ class StormAnalyzer {
 
         recs.push('Deploy canvassing teams to affected zip codes');
         
-        if (isTornado || isHurricane) {
+        if (isHurricane) {
             recs.push('Prepare for emergency tarping and restoration demand');
             recs.push('Contact insurance adjusters for immediate inspections');
             recs.push('Mobilize emergency response teams');
