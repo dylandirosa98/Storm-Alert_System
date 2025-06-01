@@ -1,5 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 
 class Database {
     constructor() {
@@ -9,7 +10,18 @@ class Database {
     initialize() {
         return new Promise((resolve, reject) => {
             try {
-                this.db = new sqlite3.Database(path.join(__dirname, 'storm_alerts.db'), (err) => {
+                // Use Railway's persistent storage if available, otherwise use local path
+                const dbDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+                const dbPath = path.join(dbDir, 'storm_alerts.db');
+                
+                // Ensure the directory exists
+                if (!fs.existsSync(dbDir)) {
+                    fs.mkdirSync(dbDir, { recursive: true });
+                }
+
+                console.log('Database path:', dbPath);
+                
+                this.db = new sqlite3.Database(dbPath, (err) => {
                     if (err) {
                         console.error('Error opening database:', err);
                         reject(err);
