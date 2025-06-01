@@ -151,52 +151,15 @@ app.get('/api/migrate-database', async (req, res) => {
         const fs = require('fs');
         const path = require('path');
         
-        console.log('🚀 Starting database migration to persistent volume...');
+        console.log('🚀 Starting database migration and backup check...');
         
         // Check current environment
         const envCheck = {
             NODE_ENV: process.env.NODE_ENV || 'undefined',
-            RAILWAY_VOLUME_MOUNT_PATH: process.env.RAILWAY_VOLUME_MOUNT_PATH || 'undefined'
+            DB_BACKUP: process.env.DB_BACKUP ? 'Available' : 'Not set'
         };
         
         console.log('🌍 Environment Check:', envCheck);
-        
-        // Define paths
-        const localDbPath = path.join(__dirname, 'storm_alerts.db');
-        const volumeDbPath = '/data/storm_alerts.db';
-        
-        const pathInfo = {
-            localPath: localDbPath,
-            volumePath: volumeDbPath,
-            localExists: fs.existsSync(localDbPath),
-            volumeDirExists: fs.existsSync('/data'),
-            volumeDbExists: fs.existsSync(volumeDbPath)
-        };
-        
-        console.log('📁 Database Paths:', pathInfo);
-        
-        let migrationResult = 'No migration needed';
-        
-        // Check if volume directory exists
-        if (pathInfo.volumeDirExists) {
-            // If local database exists but volume database doesn't, copy it
-            if (pathInfo.localExists && !pathInfo.volumeDbExists) {
-                console.log('📋 Migrating database to volume...');
-                try {
-                    fs.copyFileSync(localDbPath, volumeDbPath);
-                    migrationResult = 'Database successfully migrated to volume!';
-                    console.log('✅', migrationResult);
-                } catch (error) {
-                    migrationResult = `Error migrating database: ${error.message}`;
-                    console.error('❌', migrationResult);
-                    return res.status(500).json({ error: migrationResult });
-                }
-            } else if (pathInfo.volumeDbExists) {
-                migrationResult = 'Database already exists in volume';
-            }
-        } else {
-            migrationResult = 'Running in local development mode - volume not available';
-        }
         
         // Check database contents
         let dbContents;
@@ -220,13 +183,26 @@ app.get('/api/migrate-database', async (req, res) => {
         } catch (error) {
             dbContents = { error: `Failed to read database: ${error.message}` };
         }
+
+        // Create a fresh backup
+        let backupData = null;
+        try {
+            backupData = await db.createBackup();
+            console.log('📋 Fresh backup created');
+        } catch (error) {
+            console.error('Failed to create backup:', error.message);
+        }
         
         const result = {
-            migration: migrationResult,
+            status: 'Database migration check complete',
             environment: envCheck,
-            paths: pathInfo,
             database: dbContents,
-            timestamp: new Date()
+            backup: backupData ? 'Created successfully' : 'Failed to create',
+            timestamp: new Date(),
+            instructions: {
+                message: 'To preserve data across deployments, copy the backup data below and set it as DB_BACKUP environment variable in Railway',
+                backupData: backupData
+            }
         };
         
         console.log('✅ Migration check complete');
