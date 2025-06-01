@@ -145,6 +145,99 @@ app.get('/api/health', (req, res) => {
     res.json(healthStatus);
 });
 
+// Database migration endpoint
+app.get('/api/migrate-database', async (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        console.log('🚀 Starting database migration to persistent volume...');
+        
+        // Check current environment
+        const envCheck = {
+            NODE_ENV: process.env.NODE_ENV || 'undefined',
+            RAILWAY_VOLUME_MOUNT_PATH: process.env.RAILWAY_VOLUME_MOUNT_PATH || 'undefined'
+        };
+        
+        console.log('🌍 Environment Check:', envCheck);
+        
+        // Define paths
+        const localDbPath = path.join(__dirname, 'storm_alerts.db');
+        const volumeDbPath = '/data/storm_alerts.db';
+        
+        const pathInfo = {
+            localPath: localDbPath,
+            volumePath: volumeDbPath,
+            localExists: fs.existsSync(localDbPath),
+            volumeDirExists: fs.existsSync('/data'),
+            volumeDbExists: fs.existsSync(volumeDbPath)
+        };
+        
+        console.log('📁 Database Paths:', pathInfo);
+        
+        let migrationResult = 'No migration needed';
+        
+        // Check if volume directory exists
+        if (pathInfo.volumeDirExists) {
+            // If local database exists but volume database doesn't, copy it
+            if (pathInfo.localExists && !pathInfo.volumeDbExists) {
+                console.log('📋 Migrating database to volume...');
+                try {
+                    fs.copyFileSync(localDbPath, volumeDbPath);
+                    migrationResult = 'Database successfully migrated to volume!';
+                    console.log('✅', migrationResult);
+                } catch (error) {
+                    migrationResult = `Error migrating database: ${error.message}`;
+                    console.error('❌', migrationResult);
+                    return res.status(500).json({ error: migrationResult });
+                }
+            } else if (pathInfo.volumeDbExists) {
+                migrationResult = 'Database already exists in volume';
+            }
+        } else {
+            migrationResult = 'Running in local development mode - volume not available';
+        }
+        
+        // Check database contents
+        let dbContents;
+        try {
+            const companies = await new Promise((resolve, reject) => {
+                db.db.all("SELECT * FROM companies", (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows);
+                });
+            });
+            
+            dbContents = {
+                totalCompanies: companies.length,
+                companies: companies.map(c => ({
+                    name: c.company_name,
+                    email: c.email,
+                    stateCount: c.states.split(',').length,
+                    active: c.active
+                }))
+            };
+        } catch (error) {
+            dbContents = { error: `Failed to read database: ${error.message}` };
+        }
+        
+        const result = {
+            migration: migrationResult,
+            environment: envCheck,
+            paths: pathInfo,
+            database: dbContents,
+            timestamp: new Date()
+        };
+        
+        console.log('✅ Migration check complete');
+        res.json(result);
+        
+    } catch (error) {
+        console.error('❌ Migration endpoint error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Test storm check endpoint
 app.get('/api/test-storm-check', async (req, res) => {
     console.log('Manual storm check triggered...');
