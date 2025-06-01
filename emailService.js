@@ -6,8 +6,8 @@ class EmailService {
     constructor() {
         // Initialize Resend with the API key
         this.resend = new Resend('re_TBwVnBac_H4XwzspEqMeMgREGGPGnproW');
-        this.senderEmail = 'onboarding@resend.dev';
-        this.senderName = 'Storm Alert System';
+        this.senderEmail = 'info@pythonwebsolutions.com';
+        this.senderName = 'Storm Alert Pro';
         this.adminEmail = 'dylandirosa980@gmail.com';
     }
 

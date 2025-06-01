@@ -37,14 +37,27 @@ class StormAnalyzer {
                 windSpeed = parseFloat(generalWindMatch[1]);
             }
 
-            const isHailRelevant = hailSize >= 1.0;
-            const isWindRelevant = windSpeed >= 58;
+            const isSevereThunderstorm = event.includes('Severe Thunderstorm Warning');
+
+            // Special handling for Severe Thunderstorm Warnings
+            // By NWS definition, they ALWAYS have either 58+ mph winds or 1"+ hail
+            if (isSevereThunderstorm && windSpeed === 0 && hailSize === 0) {
+                console.log(`   ⚠️ Severe Thunderstorm Warning with no extracted values`);
+                console.log(`   📌 Assuming minimum severe criteria (58 mph winds) per NWS definition`);
+                // Default to wind criteria if we can't extract specific values
+                windSpeed = 58;
+            }
+
+            // Recalculate relevance flags after potential adjustments
+            const isHailRelevantFinal = hailSize >= 1.0;
+            const isWindRelevantFinal = windSpeed >= 58;
+
             const isTornado = /tornado/i.test(event) || /tornado/i.test(headline);
             const isHurricane = /hurricane|tropical storm/i.test(event);
 
             // Log detection results
-            if (hailSize > 0) console.log(`   🧊 Hail Size: ${hailSize}" ${isHailRelevant ? '✅' : '❌'}`);
-            if (windSpeed > 0) console.log(`   💨 Wind Speed: ${windSpeed} mph ${isWindRelevant ? '✅' : '❌'}`);
+            if (hailSize > 0) console.log(`   🧊 Hail Size: ${hailSize}" ${isHailRelevantFinal ? '✅' : '❌'}`);
+            if (windSpeed > 0) console.log(`   💨 Wind Speed: ${windSpeed} mph ${isWindRelevantFinal ? '✅' : '❌'}`);
             if (isTornado) console.log(`   🌪️ Tornado Event Detected (excluded from alerts) ⚠️`);
             if (isHurricane) console.log(`   🌀 Hurricane Event Detected ✅`);
 
@@ -55,7 +68,7 @@ class StormAnalyzer {
             }
 
             // THEN: Check other criteria for non-tornado events
-            const worthCanvassing = isHailRelevant || isWindRelevant || isHurricane;
+            const worthCanvassing = isHailRelevantFinal || isWindRelevantFinal || isHurricane;
 
             if (!worthCanvassing) {
                 console.log(`   ❌ Alert filtered out - Does not meet roofing damage criteria`);
@@ -66,12 +79,12 @@ class StormAnalyzer {
 
             // Calculate market opportunity (removed tornado calculations)
             const potentialJobs = isHurricane ? 300 :
-                                isHailRelevant ? 100 :
-                                isWindRelevant ? 50 : 0;
+                                isHailRelevantFinal ? 100 :
+                                isWindRelevantFinal ? 50 : 0;
 
             const avgJobValue = isHurricane ? 12000 :
-                              isHailRelevant ? 9000 :
-                              isWindRelevant ? 7000 : 0;
+                              isHailRelevantFinal ? 9000 :
+                              isWindRelevantFinal ? 7000 : 0;
 
             const totalMarketValue = potentialJobs * avgJobValue;
 
@@ -94,7 +107,7 @@ class StormAnalyzer {
                     areas: areaDesc,
                     headline,
                     description,
-                    severityScore: (isHurricane ? 9 : isHailRelevant ? 8 : 7),
+                    severityScore: (isHurricane ? 9 : isHailRelevantFinal ? 8 : 7),
                     windSpeed,
                     hailSize,
                     damageEstimate: {
@@ -104,7 +117,7 @@ class StormAnalyzer {
                     },
                     zipCodes: zipCodes
                 }],
-                recommendations: this.generateRecommendations({ isTornado: false, isHailRelevant, isWindRelevant, isHurricane })
+                recommendations: this.generateRecommendations({ isTornado: false, isHailRelevant: isHailRelevantFinal, isWindRelevant: isWindRelevantFinal, isHurricane })
             });
         }
 
