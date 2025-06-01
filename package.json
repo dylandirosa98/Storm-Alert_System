@@ -19,7 +19,11 @@
     "express": "^4.18.2",
     "node-cron": "^3.0.3",
     "resend": "^2.1.0",
-    "sqlite3": "^5.1.6"
+    "sqlite3": "^5.1.6",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   },
   "engines": {
     "node": ">=18.0.0"
