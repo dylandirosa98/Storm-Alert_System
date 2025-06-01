@@ -25,8 +25,17 @@ class StormAnalyzer {
             const hailSizeMatch = description.match(/([0-9.]+)\s?(inch|inches)/i);
             const hailSize = hailSizeMatch ? parseFloat(hailSizeMatch[1]) : 0;
 
-            const windSpeedMatch = description.match(/([0-9.]+)\s?mph/i);
-            const windSpeed = windSpeedMatch ? parseFloat(windSpeedMatch[1]) : 0;
+            // Updated regex to capture wind speeds from HAZARD sections and other patterns
+            // First try HAZARD section, then general wind patterns
+            let windSpeed = 0;
+            const hazardWindMatch = description.match(/HAZARD[.\s]*?([0-9]+)\s*mph\s*wind/i);
+            const generalWindMatch = description.match(/(?:wind gusts?|sustained winds?|winds?)\s*(?:up to|gusting to|of)?\s*([0-9]+)\s*mph/i);
+            
+            if (hazardWindMatch) {
+                windSpeed = parseFloat(hazardWindMatch[1]);
+            } else if (generalWindMatch) {
+                windSpeed = parseFloat(generalWindMatch[1]);
+            }
 
             const isHailRelevant = hailSize >= 1.0;
             const isWindRelevant = windSpeed >= 58;
