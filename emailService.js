@@ -458,12 +458,19 @@ class EmailService {
 
     async subscribeToNewsletter(email) {
         try {
+            // Get the beehiiv API key from environment variables
+            const beehiivApiKey = process.env.BEEHIIV_API_KEY;
+            
+            if (!beehiivApiKey) {
+                throw new Error('BEEHIIV_API_KEY environment variable is not set');
+            }
+
             // First, we need to get the publication ID from the beehiiv API
             // Since we don't have the publication ID, let's try to get it from the publications endpoint
             const publicationsResponse = await fetch('https://api.beehiiv.com/v2/publications', {
                 method: 'GET',
                 headers: {
-                    'Authorization': 'Bearer 5KXFHjWMGhhnfu9hLCwzpIiwOourM8Zgs5hrYAwtetdoEfXIDSvC0nzYBW5vJlnV',
+                    'Authorization': `Bearer ${beehiivApiKey}`,
                     'Accept': 'application/json'
                 }
             });
@@ -489,7 +496,7 @@ class EmailService {
             const subscriptionResponse = await fetch(`https://api.beehiiv.com/v2/publications/${publicationId}/subscriptions`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': 'Bearer 5KXFHjWMGhhnfu9hLCwzpIiwOourM8Zgs5hrYAwtetdoEfXIDSvC0nzYBW5vJlnV',
+                    'Authorization': `Bearer ${beehiivApiKey}`,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
