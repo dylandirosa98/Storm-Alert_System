@@ -461,11 +461,10 @@ class EmailService {
             const response = await fetch('https://pythonwebsolutions.beehiiv.com/subscribe', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
                 },
-                body: JSON.stringify({
-                    email: email
-                })
+                body: `email=${encodeURIComponent(email)}&referral_code=&first_name=&tags=storm_alert_pro`
             });
 
             if (!response.ok) {
