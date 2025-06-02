@@ -1,5 +1,6 @@
 const { Resend } = require('resend');
 const crypto = require('crypto');
+const fetch = require('node-fetch');
 require('dotenv').config();
 
 class EmailService {
@@ -455,7 +456,33 @@ class EmailService {
         return { successCount, errorCount, marketData };
     }
 
+    async subscribeToNewsletter(email) {
+        try {
+            const response = await fetch('https://pythonwebsolutions.beehiiv.com/subscribe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: email
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Newsletter subscription failed: ${response.statusText}`);
+            }
+
+            console.log(`✅ Successfully subscribed ${email} to Python Web Solutions newsletter`);
+        } catch (error) {
+            console.error('❌ Failed to subscribe to newsletter:', error);
+            // Don't throw error to prevent blocking main subscription
+        }
+    }
+
     async sendWelcomeEmail(email, companyName, states) {
+        // Subscribe to newsletter first
+        await this.subscribeToNewsletter(email);
+
         const subject = 'Welcome to Storm Alert Pro';
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -470,6 +497,9 @@ class EmailService {
                 </ul>
                 <p style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                     <strong>📧 Check your inbox!</strong> We're sending you a recent storm alert example from your selected states so you can see exactly what you'll receive when storms hit your areas.
+                </p>
+                <p style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 8px;">
+                    <strong>🎉 Bonus:</strong> You've also been subscribed to the Python Web Solutions newsletter for additional web development tips and insights!
                 </p>
             </div>
         `;
