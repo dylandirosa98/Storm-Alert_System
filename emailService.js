@@ -458,23 +458,65 @@ class EmailService {
 
     async subscribeToNewsletter(email) {
         try {
-            const response = await fetch('https://pythonwebsolutions.beehiiv.com/subscribe', {
-                method: 'POST',
+            // First, we need to get the publication ID from the beehiiv API
+            // Since we don't have the publication ID, let's try to get it from the publications endpoint
+            const publicationsResponse = await fetch('https://api.beehiiv.com/v2/publications', {
+                method: 'GET',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-                },
-                body: `email=${encodeURIComponent(email)}&referral_code=&first_name=&tags=storm_alert_pro`
+                    'Authorization': 'Bearer 5KXFHjWMGhhnfu9hLCwzpIiwOourM8Zgs5hrYAwtetdoEfXIDSvC0nzYBW5vJlnV',
+                    'Accept': 'application/json'
+                }
             });
 
-            if (!response.ok) {
-                throw new Error(`Newsletter subscription failed: ${response.statusText}`);
+            if (!publicationsResponse.ok) {
+                throw new Error(`Failed to get publications: ${publicationsResponse.status} ${publicationsResponse.statusText}`);
             }
 
-            console.log(`✅ Successfully subscribed ${email} to Python Web Solutions newsletter`);
+            const publicationsData = await publicationsResponse.json();
+            console.log('Publications data:', publicationsData);
+            
+            // Get the first publication ID (or the Python Web Solutions publication)
+            const publication = publicationsData.data && publicationsData.data.length > 0 ? publicationsData.data[0] : null;
+            
+            if (!publication || !publication.id) {
+                throw new Error('No publication found for this API key');
+            }
+
+            const publicationId = publication.id;
+            console.log(`Using publication ID: ${publicationId} for ${publication.name || 'Unknown Publication'}`);
+
+            // Now subscribe the user to the newsletter
+            const subscriptionResponse = await fetch(`https://api.beehiiv.com/v2/publications/${publicationId}/subscriptions`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer 5KXFHjWMGhhnfu9hLCwzpIiwOourM8Zgs5hrYAwtetdoEfXIDSvC0nzYBW5vJlnV',
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    email: email,
+                    reactivate_existing: false,
+                    send_welcome_email: true,
+                    utm_source: 'storm_alert_system',
+                    utm_medium: 'automatic_subscription',
+                    referring_site: 'storm-alert-system'
+                })
+            });
+
+            if (!subscriptionResponse.ok) {
+                const errorText = await subscriptionResponse.text();
+                console.error('Subscription failed:', errorText);
+                throw new Error(`Newsletter subscription failed: ${subscriptionResponse.status} ${subscriptionResponse.statusText} - ${errorText}`);
+            }
+
+            const result = await subscriptionResponse.json();
+            console.log(`✅ Successfully subscribed ${email} to ${publication.name} newsletter via beehiiv API`);
+            console.log('Subscription result:', result);
+            return result;
         } catch (error) {
-            console.error('❌ Failed to subscribe to newsletter:', error);
+            console.error('❌ Failed to subscribe to newsletter via beehiiv API:', error);
             // Don't throw error to prevent blocking main subscription
+            return null;
         }
     }
 
