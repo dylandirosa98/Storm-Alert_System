@@ -69,6 +69,15 @@ app.post('/api/subscribe', async (req, res) => {
         }
 
         try {
+            // Subscribe to newsletter first
+            try {
+                await emailService.subscribeToNewsletter(email);
+                console.log('✅ Newsletter subscription successful');
+            } catch (newsletterError) {
+                console.error('❌ Newsletter subscription failed:', newsletterError);
+                // Continue with main subscription even if newsletter fails
+            }
+
             const companyId = await db.addCompany({
                 companyName,
                 email,

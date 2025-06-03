@@ -328,6 +328,36 @@ class WeatherService {
         };
     }
 
+    isRoofDamageRelevant(alert) {
+        const { event = '', severity = '', description = '' } = alert.properties;
+
+        // Always keep Extreme or Severe alerts
+        const sevRank = ['Unknown','Minor','Moderate','Severe','Extreme'];
+        const isSevereRank = sevRank.indexOf(severity) >= sevRank.indexOf('Severe');
+
+        // Check key terms in the event title
+        const eventText = event.toLowerCase();
+        const keyEvent =
+            eventText.includes('tornado')         ||
+            eventText.includes('hurricane')       ||
+            eventText.includes('tropical storm')  ||
+            eventText.includes('thunderstorm')    ||
+            eventText.includes('hail')            ||
+            eventText.includes('wind');
+
+        // Parse hail size & wind speed out of the description
+        const hailMatch = description.match(/(\d+(\.\d+)?)\s?(inch|in)\b/i);
+        const hailSize  = hailMatch ? parseFloat(hailMatch[1]) : 0;
+
+        const windMatch = description.match(/(\d+(\.\d+)?)\s?mph\b/i);
+        const windSpeed = windMatch ? parseFloat(windMatch[1]) : 0;
+
+        const bigHail   = hailSize >= 1.0;   // ≥ quarter-size
+        const bigWind   = windSpeed >= 58;   // NWS severe threshold
+
+        return isSevereRank || keyEvent || bigHail || bigWind;
+    }
+
     async delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -372,57 +402,10 @@ class WeatherService {
                             const alerts = alertsResponse.data.features;
                             console.log(`Found ${alerts.length} alerts for zone ${zoneId}`);
                             
-                            const severeAlerts = alerts.filter(alert => {
-                                const event = alert.properties.event;
-                                const severity = alert.properties.severity;
-                                const description = alert.properties.description || '';
-                                const headline = alert.properties.headline || '';
-                                
-                                // Log every alert we find for debugging
-                                console.log(`🔍 Analyzing alert: ${event}`);
-                                console.log(`   Severity: ${severity || 'Not specified'}`);
-                                console.log(`   Zone: ${zoneId}`);
-                                console.log(`   Area: ${alert.properties.areaDesc || 'Not specified'}`);
-                                
-                                // Updated storm filtering - include warnings and watches for hail/wind analysis
-                                // Exclude tornado warnings per user request, but include other severe weather
-                                const isSevereEvent = (
-                                    (event.includes('Severe Thunderstorm Warning') || event.includes('Severe Thunderstorm Watch')) ||
-                                    (event.includes('High Wind Warning') || event.includes('High Wind Watch')) ||
-                                    (event.includes('Hurricane Warning') || event.includes('Hurricane Watch')) ||
-                                    (event.includes('Tropical Storm Warning') || event.includes('Tropical Storm Watch')) ||
-                                    event.includes('Hail') ||
-                                    description.toLowerCase().includes('hail') ||
-                                    description.toLowerCase().includes('damaging winds') ||
-                                    description.toLowerCase().includes('severe thunderstorm') ||
-                                    headline.toLowerCase().includes('hail') ||
-                                    headline.toLowerCase().includes('wind')
-                                ) && !(
-                                    // Exclude tornado warnings as per user request
-                                    event.includes('Tornado Warning') || event.includes('Tornado Watch')
-                                );
+                            const relevantAlerts = alerts.filter(a => this.isRoofDamageRelevant(a));
+                            allAlerts = allAlerts.concat(relevantAlerts);
 
-                                // Less restrictive state checking - just check if it's in the right general area
-                                const stateAbbrev = this.stateAbbreviations[state];
-                                const isCorrectState = alert.properties.areaDesc.includes(stateAbbrev) || 
-                                                     alert.properties.areaDesc.includes(state) ||
-                                                     zoneId.startsWith(stateAbbrev); // If we're checking the zone, it should be the right state
-
-                                if (isSevereEvent) {
-                                    console.log(`✅ STORM EVENT FOUND: ${event}`);
-                                    console.log(`   Will include in analysis: ${isSevereEvent && isCorrectState}`);
-                                    if (!isCorrectState) {
-                                        console.log(`   ⚠️ State mismatch - Expected: ${state}/${stateAbbrev}, Got: ${alert.properties.areaDesc}`);
-                                    }
-                                } else {
-                                    console.log(`❌ Not a storm event: ${event}`);
-                                }
-
-                                return isSevereEvent && isCorrectState;
-                            });
-
-                            console.log(`Found ${severeAlerts.length} severe alerts for zone ${zoneId}`);
-                            allAlerts = allAlerts.concat(severeAlerts);
+                            console.log(`Found ${relevantAlerts.length} roof-damage relevant alerts for zone ${zoneId}`);
                         }
                     } catch (zoneError) {
                         console.error(`Error fetching alerts for zone ${this.stateAbbreviations[state]}Z${zone.toString().padStart(3, '0')}:`, zoneError.message);
@@ -452,6 +435,7 @@ class WeatherService {
                 }
             }
 
+            console.log(`[${state}] returning ${allAlerts.length} roof-damage alerts`);
             console.log(`Total severe alerts found for ${state}: ${allAlerts.length}`);
             return allAlerts;
         } catch (error) {
@@ -500,11 +484,8 @@ class WeatherService {
                     console.log(`📋 Found ${alerts.length} total recent alerts for ${state}`);
                     
                     const recentStormAlerts = alerts.filter(alert => {
-                        const event = alert.properties.event;
                         const onset = new Date(alert.properties.onset || alert.properties.sent);
                         const expires = new Date(alert.properties.expires || alert.properties.ends);
-                        const description = alert.properties.description || '';
-                        const headline = alert.properties.headline || '';
                         
                         // Check if this alert was active within our time window
                         const wasRecentlyActive = (
@@ -513,32 +494,17 @@ class WeatherService {
                             (onset <= cutoffTime && expires >= new Date()) // Was active during our window
                         );
                         
-                        // Updated storm filtering - include warnings and watches for hail/wind analysis
-                        // Exclude tornado warnings per user request, but include other severe weather
-                        const isSevereEvent = (
-                            (event.includes('Severe Thunderstorm Warning') || event.includes('Severe Thunderstorm Watch')) ||
-                            (event.includes('High Wind Warning') || event.includes('High Wind Watch')) ||
-                            (event.includes('Hurricane Warning') || event.includes('Hurricane Watch')) ||
-                            (event.includes('Tropical Storm Warning') || event.includes('Tropical Storm Watch')) ||
-                            event.includes('Hail') ||
-                            description.toLowerCase().includes('hail') ||
-                            description.toLowerCase().includes('damaging winds') ||
-                            description.toLowerCase().includes('severe thunderstorm') ||
-                            headline.toLowerCase().includes('hail') ||
-                            headline.toLowerCase().includes('wind')
-                        ) && !(
-                            // Exclude tornado warnings as per user request
-                            event.includes('Tornado Warning') || event.includes('Tornado Watch')
-                        );
+                        // Use the same roof damage relevant filter
+                        const isRoofDamageRelevant = this.isRoofDamageRelevant(alert);
 
-                        if (isSevereEvent && wasRecentlyActive) {
-                            console.log(`🕐 RECENT STORM FOUND: ${event}`);
+                        if (isRoofDamageRelevant && wasRecentlyActive) {
+                            console.log(`🕐 RECENT STORM FOUND: ${alert.properties.event}`);
                             console.log(`   Onset: ${onset.toLocaleString()}`);
                             console.log(`   Expires: ${expires.toLocaleString()}`);
                             console.log(`   Area: ${alert.properties.areaDesc}`);
                         }
 
-                        return isSevereEvent && wasRecentlyActive;
+                        return isRoofDamageRelevant && wasRecentlyActive;
                     });
 
                     console.log(`⚡ Found ${recentStormAlerts.length} recent storm alerts for ${state}`);
@@ -579,6 +545,7 @@ class WeatherService {
             console.log(`   Total unique alerts: ${uniqueAlerts.length}`);
 
             // Create a StormAnalyzer instance
+            const StormAnalyzer = require('./stormAnalyzer');
             const stormAnalyzer = new StormAnalyzer();
             
             // Pass both the alerts and the state to the analyzer
@@ -605,4 +572,4 @@ class WeatherService {
     }
 }
 
-module.exports = WeatherService; 
+module.exports = WeatherService;
