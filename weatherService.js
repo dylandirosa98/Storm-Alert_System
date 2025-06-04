@@ -329,33 +329,91 @@ class WeatherService {
     }
 
     isRoofDamageRelevant(alert) {
-        const { event = '', severity = '', description = '' } = alert.properties;
+        const description = (alert.properties.description || "").toLowerCase(); // Process in lowercase
+        const event = (alert.properties.event || "").toLowerCase();
+        const headline = (alert.properties.headline || "").toLowerCase();
 
-        // Always keep Extreme or Severe alerts
-        const sevRank = ['Unknown','Minor','Moderate','Severe','Extreme'];
-        const isSevereRank = sevRank.indexOf(severity) >= sevRank.indexOf('Severe');
+        let hailSize = 0;
+        let windSpeed = 0;
 
-        // Check key terms in the event title
-        const eventText = event.toLowerCase();
-        const keyEvent =
-            eventText.includes('tornado')         ||
-            eventText.includes('hurricane')       ||
-            eventText.includes('tropical storm')  ||
-            eventText.includes('thunderstorm')    ||
-            eventText.includes('hail')            ||
-            eventText.includes('wind');
+        // Priority 1: NWS Structured Hail Parameter
+        // Example: "* MAX HAIL SIZE...1.00 IN"
+        const maxHailRegex = /\* max hail size\.*(\d+(?:\.\d+)?)\s*in/i;
+        const maxHailMatch = description.match(maxHailRegex);
+        if (maxHailMatch && maxHailMatch[1]) {
+            hailSize = parseFloat(maxHailMatch[1]);
+        } else {
+            // Priority 2: General textual hail reports mentioning "hail" and "inch" from description
+            const generalHailRegexDesc = /(?:hail(?: of| up to)?|size hail)\s*\(?(\d+(?:\.\d+)?)\s*in(?:ch(?:es)?)?\)?/i;
+            const generalHailMatchDesc = description.match(generalHailRegexDesc);
+            if (generalHailMatchDesc && generalHailMatchDesc[1]) {
+                hailSize = parseFloat(generalHailMatchDesc[1]);
+            } else {
+                 // Priority 3: Check headline for similar hail information
+                const generalHailRegexHeadline = /(?:hail(?: of| up to)?|size hail)\s*\(?(\d+(?:\.\d+)?)\s*in(?:ch(?:es)?)?\)?/i;
+                const generalHailMatchHeadline = headline.match(generalHailRegexHeadline);
+                if (generalHailMatchHeadline && generalHailMatchHeadline[1]) {
+                    hailSize = parseFloat(generalHailMatchHeadline[1]);
+                }
+            }
+        }
 
-        // Parse hail size & wind speed out of the description
-        const hailMatch = description.match(/(\d+(\.\d+)?)\s?(inch|in)\b/i);
-        const hailSize  = hailMatch ? parseFloat(hailMatch[1]) : 0;
+        // Priority 1: NWS Structured Wind Parameter
+        // Example: "* MAX WIND GUST...60 MPH"
+        const maxWindRegex = /\* max wind gust\.*(\d+)\s*mph/i;
+        const maxWindMatch = description.match(maxWindRegex);
+        if (maxWindMatch && maxWindMatch[1]) {
+            windSpeed = parseFloat(maxWindMatch[1]);
+        } else {
+            // Priority 2: Specific wind phrases in description
+            const specificWindRegexDesc = /(?:wind gusts(?: of)?|winds up to|wind speeds up to|gusts up to|wind speed of)\s*(\d+)\s*mph/i;
+            const specificWindMatchDesc = description.match(specificWindRegexDesc);
+            if (specificWindMatchDesc && specificWindMatchDesc[1]) {
+                windSpeed = parseFloat(specificWindMatchDesc[1]);
+            } else {
+                // Priority 3: Specific wind phrases in headline
+                const specificWindRegexHeadline = /(?:wind gusts(?: of)?|winds up to|wind speeds up to|gusts up to|wind speed of)\s*(\d+)\s*mph/i;
+                const specificWindMatchHeadline = headline.match(specificWindRegexHeadline);
+                if (specificWindMatchHeadline && specificWindMatchHeadline[1]) {
+                    windSpeed = parseFloat(specificWindMatchHeadline[1]);
+                } else {
+                    // Priority 4: General MPH mention in description (conditional)
+                    const broaderWindMatchDesc = description.match(/(\d+)\s*mph/i);
+                    if (broaderWindMatchDesc && broaderWindMatchDesc[1]) {
+                        if (event.includes("wind") || event.includes("thunderstorm") || event.includes("hurricane") || event.includes("tornado") || event.includes("tropical storm")) {
+                             windSpeed = parseFloat(broaderWindMatchDesc[1]);
+                        }
+                    } else {
+                        // Priority 5: General MPH mention in headline (conditional)
+                        const broaderWindMatchHeadline = headline.match(/(\d+)\s*mph/i);
+                        if (broaderWindMatchHeadline && broaderWindMatchHeadline[1]) {
+                             if (event.includes("wind") || event.includes("thunderstorm") || event.includes("hurricane") || event.includes("tornado") || event.includes("tropical storm")) {
+                                windSpeed = parseFloat(broaderWindMatchHeadline[1]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        const originalEventForLog = alert.properties.event || "N/A"; // Use original casing for logs
+        if (hailSize > 0 || windSpeed > 0) { 
+            console.log(`[WeatherService] Parsed Conditions for event "${originalEventForLog}": Hail: ${hailSize}in, Wind: ${windSpeed}mph.`);
+        }
 
-        const windMatch = description.match(/(\d+(\.\d+)?)\s?mph\b/i);
-        const windSpeed = windMatch ? parseFloat(windMatch[1]) : 0;
+        const qualifiesByHail = hailSize >= 1.0;
+        const qualifiesByWind = windSpeed >= 58;
+        
+        let relevant = qualifiesByHail || qualifiesByWind;
 
-        const bigHail   = hailSize >= 1.0;   // ≥ quarter-size
-        const bigWind   = windSpeed >= 58;   // NWS severe threshold
-
-        return isSevereRank || keyEvent || bigHail || bigWind;
+        if (relevant) {
+             console.log(`[WeatherService] Alert QUALIFIED: "${originalEventForLog}". Hail: ${hailSize}in (>=1.0: ${qualifiesByHail}), Wind: ${windSpeed}mph (>=58: ${qualifiesByWind})`);
+        } else {
+            if (hailSize > 0 || windSpeed > 0 || event.includes("hail") || event.includes("wind") || event.includes("thunderstorm") || event.includes("tornado") || event.includes("hurricane")) { // Log if potentially relevant but didn't meet thresholds
+                 console.log(`[WeatherService] Alert DID NOT QUALIFY: "${originalEventForLog}". Hail: ${hailSize}in (>=1.0: ${qualifiesByHail}), Wind: ${windSpeed}mph (>=58: ${qualifiesByWind})`);
+            }
+        }
+        return relevant;
     }
 
     async delay(ms) {
