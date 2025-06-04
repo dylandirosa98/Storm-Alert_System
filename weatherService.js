@@ -544,14 +544,8 @@ class WeatherService {
             console.log(`   Historical alerts: ${historicalAlerts.length}`);
             console.log(`   Total unique alerts: ${uniqueAlerts.length}`);
 
-            // Create a StormAnalyzer instance
-            const StormAnalyzer = require('./stormAnalyzer');
-            const stormAnalyzer = new StormAnalyzer();
-            
-            // Pass both the alerts and the state to the analyzer
-            const stormData = stormAnalyzer.analyzeStorms(uniqueAlerts, state);
-
-            return stormData;
+            // Return the unique, pre-filtered alerts
+            return uniqueAlerts;
 
         } catch (error) {
             console.error(`❌ Error getting comprehensive alerts for ${state}:`, error);

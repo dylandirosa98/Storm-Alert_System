@@ -1,4 +1,7 @@
+require('./instrument.js');
+
 const express = require('express');
+const Sentry = require("@sentry/node");
 const cron = require('node-cron');
 const cors = require('cors');
 const path = require('path');
@@ -755,6 +758,21 @@ async function runStormCheck() {
         console.error('Stack trace:', error.stack);
     }
 }
+
+// Add debug-sentry endpoint for testing
+app.get("/debug-sentry", function mainHandler(req, res) {
+  throw new Error("My first Sentry error!");
+});
+
+// The error handler must be registered before any other error middleware and after all controllers
+Sentry.setupExpressErrorHandler(app);
+
+// Optional fallthrough error handler
+app.use(function onError(err, req, res, next) {
+  // The error id is attached to `res.sentry` to be returned
+  res.statusCode = 500;
+  res.end(res.sentry + "\n");
+});
 
 // Start the server
 startServer(); 
