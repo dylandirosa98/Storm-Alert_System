@@ -1,5 +1,3 @@
-require('./instrument.js');
-
 const express = require('express');
 const cron = require('node-cron');
 const cors = require('cors');
