@@ -288,6 +288,7 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const states = [
@@ -344,9 +345,12 @@
             }
 
             try {
-                const response = await fetch('/api/subscribe', {
+                const response = await fetch(`${CONFIG.API_URL}/api/subscribe`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Origin': window.location.origin
+                    },
                     body: JSON.stringify(formData)
                 });
 
