@@ -1,3 +1,3 @@
 const CONFIG = {
-    API_URL: 'https://web-production-bb99.up.railway.app'  // Your actual Railway URL
+    API_URL: 'https://web-production-bb99.up.railway.app/storm-alert-agent'  // Your actual Railway URL with base path
 }; 
