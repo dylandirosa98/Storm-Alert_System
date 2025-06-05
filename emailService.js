@@ -46,14 +46,14 @@ class EmailService {
         }
     }
 
-    generateUnsubscribeToken(email, zipCodes) {
-        // Create a unique token based on email, zip codes, and timestamp
-        const data = `${email}:${JSON.stringify(zipCodes)}:${Date.now()}`;
+    generateUnsubscribeToken(email, geoCodes) {
+        // Create a unique token based on email, geoCodes, and timestamp
+        const data = `${email}:${JSON.stringify(geoCodes)}:${Date.now()}`;
         return crypto.createHash('sha256').update(data).digest('hex');
     }
 
-    generateUnsubscribeUrl(email, zipCodes) {
-        const token = this.generateUnsubscribeToken(email, zipCodes);
+    generateUnsubscribeUrl(email, geoCodes) {
+        const token = this.generateUnsubscribeToken(email, geoCodes);
         // Use the Railway deployment URL with the correct API path
         const baseUrl = process.env.BASE_URL || 'https://web-production-bb99.up.railway.app';
         console.log('Base URL for unsubscribe:', baseUrl);
@@ -95,9 +95,10 @@ class EmailService {
             };
         }
 
-        // Base estimates per zip code (average residential properties)
-        const avgPropertiesPerZip = 5000;
-        const totalProperties = detail.zipCodes.length * avgPropertiesPerZip;
+        // Base estimates per UGC code (average residential properties)
+        // This is a simplification; a UGC can cover a wide area.
+        const avgPropertiesPerUgc = 5000; // Kept similar logic, but now based on UGC count
+        const totalProperties = detail.ugcCodes.length * avgPropertiesPerUgc; // Changed from zipCodes
         
         let damageRate = severityMultiplier[detail.severityScore] || 0.5;
         
@@ -401,10 +402,6 @@ class EmailService {
         const cities = this.extractCitiesFromAreas(detail.areas);
         const primaryCity = cities[0] || 'Affected Area';
         
-        // Filter out zip codes containing letters (keep only numeric zip codes)
-        const numericZipCodes = detail.zipCodes.filter(zip => /^\d+$/.test(zip.toString()));
-        console.log(`Filtered zip codes: ${detail.zipCodes.length} total, ${numericZipCodes.length} numeric only`);
-        
         // Format recommendations as HTML list items
         const recommendationsList = stormData.recommendations
             .map(rec => `<li>${rec}</li>`)
@@ -415,8 +412,8 @@ class EmailService {
 
         for (const company of companies) {
             try {
-                // Use numeric zip codes for unsubscribe URL
-                const unsubscribeUrl = this.generateUnsubscribeUrl(company.email, numericZipCodes);
+                // Use ugcCodes for unsubscribe URL
+                const unsubscribeUrl = this.generateUnsubscribeUrl(company.email, detail.ugcCodes);
                 
                 const emailHtml = template
                     .replace(/{city}/g, primaryCity)
@@ -426,7 +423,6 @@ class EmailService {
                     .replace(/{hail_size}/g, detail.hailSize > 0 ? detail.hailSize.toFixed(1) : 'N/A')
                     .replace(/{wind_speed}/g, detail.windSpeed > 0 ? detail.windSpeed : 'N/A')
                     .replace(/{affected_cities}/g, cities.join(', '))
-                    .replace(/{zip_codes}/g, numericZipCodes.slice(0, 10).join(', ') + (numericZipCodes.length > 10 ? '...' : ''))
                     .replace(/{market_value}/g, this.formatCurrency(marketData.totalValue))
                     .replace(/{potential_jobs}/g, marketData.jobCount.toLocaleString())
                     .replace(/{avg_job_value}/g, marketData.avgJobValue.toLocaleString())
