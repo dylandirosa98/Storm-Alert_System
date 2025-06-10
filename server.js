@@ -10,7 +10,6 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const BASE_PATH = '/storm-alert-agent'; // Add base path
 
 // CORS configuration
 const corsOptions = {
@@ -24,11 +23,7 @@ const corsOptions = {
             'http://localhost:5000',
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5000',
-            'https://web-production-bb99.up.railway.app',
-            'https://storm-alert-system-production.up.railway.app',
-            'https://pythonwebsolutions.com',
-            'http://pythonwebsolutions.com'
-            // Add your frontend domain here when you deploy it
+            'https://web-production-bb99.up.railway.app'
         ];
         
         if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
@@ -46,8 +41,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Serve static files from the public directory under the base path
-app.use(BASE_PATH, express.static('public'));
+// Serve static files from the public directory
+app.use(express.static('public'));
 
 // Initialize services
 let db, weatherService, emailService, stormAnalyzer;
@@ -85,13 +80,13 @@ async function initializeServices() {
     }
 }
 
-// Update route paths to include BASE_PATH
-app.get(BASE_PATH + '/', (req, res) => {
+// Serve landing page
+app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Update API routes to include BASE_PATH
-app.post(BASE_PATH + '/api/subscribe', async (req, res) => {
+// Subscribe endpoint
+app.post('/api/subscribe', async (req, res) => {
     try {
         const { companyName, email, phone, contactName, states } = req.body;
         
@@ -167,7 +162,8 @@ app.post(BASE_PATH + '/api/subscribe', async (req, res) => {
     }
 });
 
-app.get(BASE_PATH + '/api/health', (req, res) => {
+// Health check
+app.get('/api/health', (req, res) => {
     const healthStatus = {
         status: 'healthy',
         timestamp: new Date(),
@@ -184,7 +180,8 @@ app.get(BASE_PATH + '/api/health', (req, res) => {
     res.json(healthStatus);
 });
 
-app.get(BASE_PATH + '/api/migrate-database', async (req, res) => {
+// Database migration endpoint
+app.get('/api/migrate-database', async (req, res) => {
     try {
         const fs = require('fs');
         const path = require('path');
@@ -252,7 +249,8 @@ app.get(BASE_PATH + '/api/migrate-database', async (req, res) => {
     }
 });
 
-app.get(BASE_PATH + '/api/test-storm-check', async (req, res) => {
+// Test storm check endpoint
+app.get('/api/test-storm-check', async (req, res) => {
     console.log('Manual storm check triggered...');
     const subscribedStates = await db.getSubscribedStates();
     
@@ -271,7 +269,8 @@ app.get(BASE_PATH + '/api/test-storm-check', async (req, res) => {
     res.json({ message: 'Comprehensive check complete - see server console' });
 });
 
-app.post(BASE_PATH + '/api/send-test-email', async (req, res) => {
+// Test email endpoint
+app.post('/api/send-test-email', async (req, res) => {
     try {
         const testStormData = {
             severity: 'HIGH',
@@ -312,7 +311,8 @@ app.post(BASE_PATH + '/api/send-test-email', async (req, res) => {
     }
 });
 
-app.get(BASE_PATH + '/api/unsubscribe', async (req, res) => {
+// Unsubscribe endpoint - make sure it matches the URL exactly
+app.get('/api/unsubscribe', async (req, res) => {
     const { token, email } = req.query;
     
     console.log('Unsubscribe request received:', { token: token ? 'present' : 'missing', email });
