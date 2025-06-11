@@ -714,13 +714,16 @@ async function runStormCheck() {
                     continue;
                 }
 
+                console.log(`✅ Found ${stormDataArray.length} storms that meet the criteria for ${state}.`);
                 const companies = await db.getCompaniesByState(state);
+                
                 if (companies.length === 0) {
-                    console.log(`📭 No companies subscribed to ${state}`);
+                    console.log(`📭 No companies subscribed to ${state}. No alerts will be sent.`);
                     continue;
                 }
                 
-                console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
+                console.log(`📧 Found ${companies.length} companies subscribed to ${state}. Preparing to send alerts.`);
+                console.log(`   Subscribed companies: ${companies.map(c => c.company_name).join(', ')}`);
                 
                 // --- CONSOLIDATION LOGIC ---
                 const hailAlerts = { maxHail: 0, affectedAreas: [], alertDetails: [] };
@@ -741,12 +744,12 @@ async function runStormCheck() {
 
                 // --- SEND CONSOLIDATED EMAILS ---
                 if (hailAlerts.alertDetails.length > 0) {
-                    console.log(`\n🧊 Sending consolidated HAIL alert for ${state}...`);
+                    console.log(`\n🧊 Calling email service for HAIL alert in ${state} to ${companies.length} companies...`);
                     await emailService.sendConsolidatedHailAlert(companies, state, hailAlerts);
                 }
 
                 if (windAlerts.alertDetails.length > 0) {
-                    console.log(`\n💨 Sending consolidated WIND alert for ${state}...`);
+                    console.log(`\n💨 Calling email service for WIND alert in ${state} to ${companies.length} companies...`);
                     await emailService.sendConsolidatedWindAlert(companies, state, windAlerts);
                 }
 
