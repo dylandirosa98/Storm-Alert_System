@@ -55,19 +55,22 @@ class EmailService {
         `;
 
         for (const company of companies) {
-            const unsubscribeLink = this.generateUnsubscribeLink(company.email);
-            const personalizedHtml = html.replace('UNSUBSCRIBE_LINK_PLACEHOLDER', unsubscribeLink);
-            
-            await this.transporter.sendMail({
-                from: 'alerts@storm-alert-system.com',
-                to: company.email,
-                subject: subject,
-                html: personalizedHtml,
-                headers: { 'X-Entity-ID': 'your-entity-id' }
-            });
+            try {
+                const unsubscribeLink = this.generateUnsubscribeLink(company.email);
+                const personalizedHtml = html.replace('UNSUBSCRIBE_LINK_PLACEHOLDER', unsubscribeLink);
+                
+                await this.transporter.sendMail({
+                    from: 'alerts@storm-alert-system.com',
+                    to: company.email,
+                    subject: subject,
+                    html: personalizedHtml,
+                    headers: { 'X-Entity-ID': 'your-entity-id' }
+                });
+            } catch (error) {
+                console.error(`❌ Failed to send consolidated hail alert to ${company.email}:`, error.message);
+            }
         }
-
-        console.log(`Consolidated hail alert sent to ${companies.length} subscribers for ${state}.`);
+        console.log(`Consolidated hail alert processing complete for ${companies.length} subscribers for ${state}.`);
     }
 
     async sendConsolidatedWindAlert(companies, state, windData) {
@@ -100,19 +103,23 @@ class EmailService {
         `;
         
         for (const company of companies) {
-            const unsubscribeLink = this.generateUnsubscribeLink(company.email);
-            const personalizedHtml = html.replace('UNSUBSCRIBE_LINK_PLACEHOLDER', unsubscribeLink);
-            
-            await this.transporter.sendMail({
-                from: 'alerts@storm-alert-system.com',
-                to: company.email,
-                subject: subject,
-                html: personalizedHtml,
-                headers: { 'X-Entity-ID': 'your-entity-id' }
-            });
+            try {
+                const unsubscribeLink = this.generateUnsubscribeLink(company.email);
+                const personalizedHtml = html.replace('UNSUBSCRIBE_LINK_PLACEHOLDER', unsubscribeLink);
+                
+                await this.transporter.sendMail({
+                    from: 'alerts@storm-alert-system.com',
+                    to: company.email,
+                    subject: subject,
+                    html: personalizedHtml,
+                    headers: { 'X-Entity-ID': 'your-entity-id' }
+                });
+            } catch (error) {
+                console.error(`❌ Failed to send consolidated wind alert to ${company.email}:`, error.message);
+            }
         }
         
-        console.log(`Consolidated wind alert sent to ${companies.length} subscribers for ${state}.`);
+        console.log(`Consolidated wind alert processing complete for ${companies.length} subscribers for ${state}.`);
     }
     
     async sendWelcomeEmail(email, companyName, states) {

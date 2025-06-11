@@ -52,6 +52,16 @@ async function initializeServices() {
     try {
         console.log('🔧 Initializing database...');
         
+        // Check for required environment variables
+        if (!process.env.RESEND_API_KEY) {
+            console.warn(`
+            ********************************************************************************
+            * WARNING: RESEND_API_KEY environment variable is not set.                     *
+            * Email functionality will be disabled.                                        *
+            ********************************************************************************
+            `);
+        }
+        
         // Create a fresh database instance
         db = new Database();
         await db.initialize();
@@ -649,11 +659,15 @@ async function startServer() {
         if (process.env.NODE_ENV === 'production') {
             console.log('Setting up production cron job...');
             
-            // Run an immediate storm check after deployment
+            // Run an immediate storm check after deployment, with robust error handling
             console.log('🚀 Running immediate post-deployment storm check...');
             setTimeout(async () => {
-                await runStormCheck();
-                console.log('✅ Post-deployment storm check completed');
+                try {
+                    await runStormCheck();
+                    console.log('✅ Post-deployment storm check completed');
+                } catch (error) {
+                    console.error('❌ An error occurred during the initial post-deployment storm check:', error);
+                }
             }, 5000); // Wait 5 seconds for server to fully start
             
             // Set up regular cron job for every 2 hours
