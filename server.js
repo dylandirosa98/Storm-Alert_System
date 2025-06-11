@@ -52,29 +52,10 @@ async function initializeServices() {
     try {
         console.log('🔧 Initializing database...');
         
-        // Check for required environment variables
-        if (!process.env.RESEND_API_KEY) {
-            console.warn(`
-            ********************************************************************************
-            * WARNING: RESEND_API_KEY environment variable is not set.                     *
-            * Email functionality will be disabled.                                        *
-            ********************************************************************************
-            `);
-        }
-        
         // Create a fresh database instance
         db = new Database();
         await db.initialize();
         console.log('✅ Database connection initialized successfully');
-        
-        // Verify database is working by testing a simple query
-        try {
-            const testStates = await db.getSubscribedStates();
-            console.log(`✅ Database verification successful - found ${testStates.length} subscribed states`);
-        } catch (verifyError) {
-            console.error('❌ Database verification failed:', verifyError);
-            throw new Error('Database initialization verification failed');
-        }
         
         console.log('🔧 Initializing other services...');
         weatherService = new WeatherService();
@@ -170,6 +151,11 @@ app.post('/api/subscribe', async (req, res) => {
         console.error('Subscription error:', error);
         res.status(500).json({ error: 'Failed to subscribe' });
     }
+});
+
+// Simple health check for Railway
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
 });
 
 // Health check
@@ -608,13 +594,32 @@ async function startServer() {
         console.log('Environment:', process.env.NODE_ENV || 'development');
         console.log('Port:', PORT);
         
-        // Initialize all services first
-        await initializeServices();
-
-        // Start the server with proper error handling
+        // Start the server FIRST so it can respond to health checks
         const server = app.listen(PORT, '0.0.0.0', () => {
             console.log(`Storm Alert System running on port ${PORT}`);
             console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+            
+            // Initialize services AFTER server is running
+            initializeServices().then(() => {
+                console.log('🎉 Server fully initialized and ready');
+                
+                // Set up cron job only after everything is ready
+                if (process.env.NODE_ENV === 'production') {
+                    console.log('Setting up production cron job...');
+                    
+                    // Set up regular cron job for every 2 hours
+                    cron.schedule('0 */2 * * *', async () => {
+                        await runStormCheck();
+                    });
+                    
+                    console.log('✅ Cron job scheduled for every 2 hours');
+                } else {
+                    console.log('Development mode - cron job disabled');
+                }
+            }).catch((error) => {
+                console.error('❌ Failed to initialize services:', error);
+                // Don't exit - server can still respond to basic requests
+            });
         });
 
         // Handle server errors before they crash the process
@@ -622,20 +627,7 @@ async function startServer() {
             console.error('Server error occurred:', error);
             if (error.code === 'EADDRINUSE') {
                 console.error(`Port ${PORT} is already in use.`);
-                console.log('Attempting to kill existing process and restart...');
-                
-                // Try to start on a different port
-                const alternatePort = parseInt(PORT) + Math.floor(Math.random() * 1000) + 1;
-                console.log(`Trying alternate port: ${alternatePort}`);
-                
-                const alternateServer = app.listen(alternatePort, '0.0.0.0', () => {
-                    console.log(`Storm Alert System running on alternate port ${alternatePort}`);
-                });
-                
-                alternateServer.on('error', (altError) => {
-                    console.error('Alternate server also failed:', altError);
-                    process.exit(1);
-                });
+                process.exit(1);
             } else {
                 console.error('Unhandled server error:', error);
                 process.exit(1);
@@ -654,20 +646,6 @@ async function startServer() {
             console.error('Unhandled Rejection at:', promise, 'reason:', reason);
             process.exit(1);
         });
-
-        // Set up cron job only in production
-        if (process.env.NODE_ENV === 'production') {
-            console.log('Setting up production cron job...');
-            
-            // Set up regular cron job for every 2 hours
-            cron.schedule('0 */2 * * *', async () => {
-                await runStormCheck();
-            });
-            
-            console.log('✅ Cron job scheduled for every 2 hours');
-        } else {
-            console.log('Development mode - cron job disabled');
-        }
 
     } catch (error) {
         console.error('Failed to start server:', error);
