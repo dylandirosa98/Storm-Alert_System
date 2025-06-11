@@ -2,7 +2,6 @@ const express = require('express');
 const cron = require('node-cron');
 const cors = require('cors');
 const path = require('path');
-const Database = require('./database');
 const WeatherService = require('./weatherService');
 const EmailService = require('./emailService');
 const StormAnalyzer = require('./stormAnalyzer');
@@ -52,6 +51,9 @@ async function initializeServices() {
     try {
         console.log('🔧 ===== INITIALIZING SERVICES =====');
         console.log('💾 Step 1: Initializing database...');
+        
+        // Lazy-load Database here to avoid crashing if sqlite3 binding is missing during cold start
+        const Database = require('./database');
         
         // Create a fresh database instance
         db = new Database();
