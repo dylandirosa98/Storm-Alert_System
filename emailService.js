@@ -47,7 +47,6 @@ class EmailService {
                 </style>
             </head>
             <body>
-                <img src="${this.baseUrl}/logo.png" alt="Storm Alert Pro Logo" style="max-width: 150px; margin-bottom: 20px;">
                 <h1>New Hail Alert for ${state}</h1>
                 <h2>Max Hail Size: ${maxHail} inches</h2>
                 <p><strong>Affected Areas:</strong> ${uniqueAreas}</p>
@@ -96,7 +95,6 @@ class EmailService {
                 </style>
             </head>
             <body>
-                <img src="${this.baseUrl}/logo.png" alt="Storm Alert Pro Logo" style="max-width: 150px; margin-bottom: 20px;">
                 <h1>New Wind Alert for ${state}</h1>
                 <h2>Max Wind Speed: ${maxWind} mph</h2>
                 <p><strong>Affected Areas:</strong> ${uniqueAreas}</p>
@@ -137,7 +135,6 @@ class EmailService {
         const subject = 'Welcome to Storm Alert Pro';
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <img src="${this.baseUrl}/logo.png" alt="Storm Alert Pro Logo" style="max-width: 150px; margin-bottom: 20px;">
                 <h1 style="color: #2a5298;">Welcome ${companyName}!</h1>
                 <p>You're now receiving storm alerts for: <strong>${states.join(', ')}</strong></p>
                 <p>When severe weather impacts your service areas, you'll receive:</p>
@@ -175,7 +172,6 @@ class EmailService {
         const subject = '🔔 New Company Registration';
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <img src="${this.baseUrl}/logo.png" alt="Storm Alert Pro Logo" style="max-width: 150px; margin-bottom: 20px;">
                 <h2 style="color: #2a5298;">New Company Registration</h2>
                 <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px;">
                     <h3>Company Details:</h3>
@@ -276,7 +272,6 @@ class EmailService {
         const subject = `Recent Storm Alert for ${state}`;
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <img src="${this.baseUrl}/logo.png" alt="Storm Alert Pro Logo" style="max-width: 150px; margin-bottom: 20px;">
                 <h1 style="color: #2a5298;">Recent Storm In Your Area</h1>
                 <p>As a new subscriber, here is an example of a recent significant storm that occurred in <strong>${state}</strong> on <strong>${new Date(createdAt).toLocaleDateString()}</strong>.</p>
                 
