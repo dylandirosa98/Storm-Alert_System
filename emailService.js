@@ -123,8 +123,8 @@ class EmailService {
     }
     
     async sendWelcomeEmail(email, companyName, states) {
-        // Subscribe to newsletter first
-        await this.subscribeToNewsletter(email);
+        // Subscribe to newsletter first - This is now handled in the main /api/subscribe route
+        // await this.subscribeToNewsletter(email);
 
         const subject = 'Welcome to Storm Alert Pro';
         const htmlContent = `
