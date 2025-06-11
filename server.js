@@ -682,10 +682,6 @@ async function runStormCheck() {
         const subscribedStates = await db.getSubscribedStates();
         console.log(`📍 Checking ${subscribedStates.length} subscribed states: ${subscribedStates.join(', ')}`);
         
-        let totalAlertsFound = 0;
-        let totalEmailsSent = 0;
-        let statesWithAlerts = [];
-        
         for (const state of subscribedStates) {
             console.log(`\n🌍 Checking ${state} for weather alerts...`);
             
@@ -693,69 +689,55 @@ async function runStormCheck() {
                 const alerts = await weatherService.getComprehensiveWeatherAlerts(state);
                 console.log(`📋 Found ${alerts ? alerts.length : 0} total alerts in ${state} (active + recent)`);
                 
-                if (alerts && alerts.length > 0) {
-                    totalAlertsFound += alerts.length;
-                    statesWithAlerts.push(`${state} (${alerts.length})`);
-                    
-                    console.log(`🔍 Analyzing storms in ${state}...`);
-                    const stormDataArray = await stormAnalyzer.analyzeStorms(alerts, state);
-                    
-                    if (stormDataArray && stormDataArray.length > 0) {
-                        console.log(`🚨 SEVERE WEATHER DETECTED in ${state}! Found ${stormDataArray.length} qualifying storms. Sending alerts...`);
-                        
-                        const companies = await db.getCompaniesByState(state);
-                        console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
-                        
-                        // Filter out unsubscribed users
-                        const activeCompanies = [];
-                        for (const company of companies) {
-                            try {
-                                const unsubscribed = await db.isUnsubscribed(company.email);
-                                if (!unsubscribed) {
-                                    activeCompanies.push(company);
-                                } else {
-                                    console.log(`🚫 Skipping unsubscribed user: ${company.email}`);
-                                }
-                            } catch (error) {
-                                console.error(`❌ Error checking unsubscribe status for ${company.email}:`, error);
-                                // Include the company if we can't check status (fail safe)
-                                activeCompanies.push(company);
-                            }
-                        }
-                        
-                        if (activeCompanies.length > 0) {
-                            console.log(`📤 Sending alerts to ${activeCompanies.length} active subscribers`);
-                            
-                            // Send each storm alert
-                            for (const stormData of stormDataArray) {
-                                try {
-                                    console.log(`📧 Sending storm alert for ${stormData.details[0].type} in ${stormData.affectedAreas[0].description}`);
-                                    const result = await emailService.sendStormAlert(stormData, activeCompanies);
-                                    totalEmailsSent += activeCompanies.length;
-                                    console.log(`✅ Storm alert sent successfully to ${activeCompanies.length} companies`);
-                                } catch (emailError) {
-                                    console.error(`❌ Failed to send storm alert:`, emailError.message);
-                                }
-                            }
-                            
-                            // Log the storm events
-                            for (const stormData of stormDataArray) {
-                                try {
-                                    await db.logStormEvent(state, stormData);
-                                    console.log(`📝 Storm event logged for ${state}`);
-                                } catch (logError) {
-                                    console.error(`❌ Failed to log storm event for ${state}:`, logError.message);
-                                }
-                            }
-                        } else {
-                            console.log(`📭 No active subscribers for ${state} (all unsubscribed)`);
-                        }
-                    } else {
-                        console.log(`ℹ️ Alerts found in ${state} but not severe enough for email notifications`);
-                    }
-                } else {
+                if (!alerts || alerts.length === 0) {
                     console.log(`✅ No alerts in ${state} - all clear`);
+                    continue;
                 }
+
+                console.log(`🔍 Analyzing storms in ${state}...`);
+                const stormDataArray = await stormAnalyzer.analyzeStorms(alerts, state);
+                
+                if (!stormDataArray || stormDataArray.length === 0) {
+                    console.log(`ℹ️ Alerts found in ${state} but did not meet final analysis criteria.`);
+                    continue;
+                }
+
+                const companies = await db.getCompaniesByState(state);
+                if (companies.length === 0) {
+                    console.log(`📭 No companies subscribed to ${state}`);
+                    continue;
+                }
+                
+                console.log(`📧 Found ${companies.length} companies subscribed to ${state}`);
+                
+                // --- CONSOLIDATION LOGIC ---
+                const hailAlerts = { maxHail: 0, affectedAreas: [], alertDetails: [] };
+                const windAlerts = { maxWind: 0, affectedAreas: [], alertDetails: [] };
+
+                for (const storm of stormDataArray) {
+                    if (storm.isHail) {
+                        hailAlerts.maxHail = Math.max(hailAlerts.maxHail, storm.hailSize);
+                        hailAlerts.affectedAreas.push(storm.areaDesc);
+                        hailAlerts.alertDetails.push(storm);
+                    }
+                    if (storm.isWind || storm.isHurricane) {
+                        windAlerts.maxWind = Math.max(windAlerts.maxWind, storm.windSpeed);
+                        windAlerts.affectedAreas.push(storm.areaDesc);
+                        windAlerts.alertDetails.push(storm);
+                    }
+                }
+
+                // --- SEND CONSOLIDATED EMAILS ---
+                if (hailAlerts.alertDetails.length > 0) {
+                    console.log(`\n🧊 Sending consolidated HAIL alert for ${state}...`);
+                    await emailService.sendConsolidatedHailAlert(companies, state, hailAlerts);
+                }
+
+                if (windAlerts.alertDetails.length > 0) {
+                    console.log(`\n💨 Sending consolidated WIND alert for ${state}...`);
+                    await emailService.sendConsolidatedWindAlert(companies, state, windAlerts);
+                }
+
             } catch (stateError) {
                 console.error(`❌ Error checking ${state}:`, stateError.message);
             }
@@ -763,18 +745,6 @@ async function runStormCheck() {
             // Small delay between states to be respectful to the API
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
-        
-        const endTime = new Date();
-        const duration = Math.round((endTime - startTime) / 1000);
-        
-        console.log(`\n📊 ========== STORM CHECK COMPLETE ==========`);
-        console.log(`⏱️ Duration: ${duration} seconds`);
-        console.log(`📍 States checked: ${subscribedStates.length}`);
-        console.log(`⚡ Total alerts found: ${totalAlertsFound}`);
-        console.log(`📧 Emails sent: ${totalEmailsSent}`);
-        console.log(`🌩️ States with alerts: ${statesWithAlerts.length > 0 ? statesWithAlerts.join(', ') : 'None'}`);
-        console.log(`🕐 Next check at: ${new Date(Date.now() + 2 * 60 * 60 * 1000).toLocaleString()}`);
-        console.log(`================================================\n`);
         
     } catch (error) {
         console.error('❌ CRITICAL ERROR in storm check:', error);

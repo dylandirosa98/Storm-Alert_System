@@ -1,20 +1,14 @@
 class StormAnalyzer {
     analyzeStorms(alerts, state) {
-        console.log(`\n🔍 Storm Analyzer: Enriching ${alerts.length} pre-qualified alerts.`);
+        console.log(`\n🔍 Storm Analyzer: Enriching ${alerts.length} pre-qualified alerts for ${state}.`);
         
         const results = [];
 
         for (const alert of alerts) {
             const { event, headline = '', description = '', areaDesc = '', severity = '', effective, expires } = alert.properties;
 
-            console.log(`\n🌩️ Processing Alert:`);
-            console.log(`   Type: ${event}`);
-            console.log(`   Area: ${areaDesc}`);
-
-            // Extract UGC codes from the alert
             const ugcCodes = alert.properties.geocode?.UGC || [];
 
-            // Values are already pre-qualified by WeatherService, but we re-parse for email content
             const hailSizeMatch = description.match(/([0-9.]+)\s?(inch|inches)/i);
             const hailSize = hailSizeMatch ? parseFloat(hailSizeMatch[1]) : 0;
 
@@ -27,58 +21,45 @@ class StormAnalyzer {
             } else if (generalWindMatch) {
                 windSpeed = parseFloat(generalWindMatch[1]);
             }
+            
+            // If it's a severe thunderstorm warning with no parsed values, set a default
+            // to ensure it's processed, as it's inherently severe.
+            if (event.includes('Severe Thunderstorm Warning') && windSpeed < 58 && hailSize < 1.0) {
+                 console.log(`   ⚠️ Severe Thunderstorm Warning with low parsed values. Setting default wind to 58mph.`);
+                 windSpeed = 58;
+            }
 
-            // Trust the pre-qualification and log the values found
-            console.log(`   🧊 Hail Found: ${hailSize}"`);
-            console.log(`   💨 Wind Found: ${windSpeed} mph`);
+            console.log(`\n🌩️ Processing Alert: ${event} in ${areaDesc}`);
+            console.log(`   🧊 Hail Found: ${hailSize}" | 💨 Wind Found: ${windSpeed} mph`);
 
             const isHurricane = /hurricane|tropical storm/i.test(event);
             const isHailRelevant = hailSize >= 1.0;
             const isWindRelevant = windSpeed >= 58;
-
-            // Since alerts are pre-qualified, we assume it's worth canvassing
-            const worthCanvassing = true;
-
-            const potentialJobs = isHurricane ? 300 : isHailRelevant ? 100 : 50; // Default to 50 if wind-only
-            const avgJobValue = isHurricane ? 12000 : isHailRelevant ? 9000 : 7000;
-            const totalMarketValue = potentialJobs * avgJobValue;
-
-            console.log(`   💰 Market Opportunity:`);
-            console.log(`      • Estimated Jobs: ${potentialJobs}`);
-            console.log(`      • Total Market: $${totalMarketValue.toLocaleString()}`);
+            
+            // The alert must have either significant wind or hail to be processed further.
+            if (!isHailRelevant && !isWindRelevant && !isHurricane) {
+                console.log(`   ❌ Alert does not meet final criteria after parsing. Skipping.`);
+                continue;
+            }
 
             results.push({
-                severity: severity.toLowerCase(),
-                state: state,
-                affectedAreas: [{
-                    description: areaDesc,
-                    ugcCodes: ugcCodes
-                }],
-                worthCanvassing,
-                details: [{
-                    type: event,
-                    severity,
-                    areas: areaDesc,
-                    headline,
-                    description,
-                    effective,
-                    expires,
-                    severityScore: (isHurricane ? 9 : isHailRelevant ? 8 : 7),
-                    windSpeed,
-                    hailSize,
-                    damageEstimate: {
-                        potentialJobs,
-                        avgJobValue,
-                        totalMarketValue
-                    },
-                    ugcCodes: ugcCodes
-                }],
-                recommendations: this.generateRecommendations({ isHailRelevant, isWindRelevant, isHurricane })
+                isHail: isHailRelevant,
+                isWind: isWindRelevant,
+                isHurricane: isHurricane,
+                hailSize: hailSize,
+                windSpeed: windSpeed,
+                areaDesc: areaDesc,
+                ugcCodes: ugcCodes,
+                headline: headline,
+                event: event,
+                description: description,
+                effective: effective,
+                expires: expires,
             });
         }
 
         if (results.length > 0) {
-            console.log(`\n📊 Analysis Complete: ${results.length} alerts enriched and ready for notification.`);
+            console.log(`\n📊 Analysis Complete: ${results.length} alerts for ${state} processed and structured.`);
         }
 
         return results;
