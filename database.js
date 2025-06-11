@@ -27,14 +27,17 @@ class Database {
             const dbPath = path.join(__dirname, 'storm_alerts.db');
             console.log('Database path:', dbPath);
 
-            this.db = new sqlite3.Database(dbPath, (err) => {
-                if (err) {
-                    console.error('Error opening database file:', err);
-                    throw err; // This will be caught by the outer try/catch
-                }
+            this.db = await new Promise((resolve, reject) => {
+                const dbInstance = new sqlite3.Database(dbPath, (err) => {
+                    if (err) {
+                        console.error('Error opening database file:', err);
+                        reject(err);
+                    } else {
+                        console.log('Database file opened successfully. Initializing schema...');
+                        resolve(dbInstance);
+                    }
+                });
             });
-
-            console.log('Database file opened successfully. Initializing schema...');
 
             await run(this.db, 'PRAGMA foreign_keys = ON');
 
