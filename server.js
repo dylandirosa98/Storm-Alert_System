@@ -50,23 +50,35 @@ let db, weatherService, emailService, stormAnalyzer;
 // Initialize database and services
 async function initializeServices() {
     try {
-        console.log('🔧 Initializing database...');
+        console.log('🔧 ===== INITIALIZING SERVICES =====');
+        console.log('💾 Step 1: Initializing database...');
         
         // Create a fresh database instance
         db = new Database();
+        console.log('✅ Database instance created');
+        
         await db.initialize();
         console.log('✅ Database connection initialized successfully');
         
-        console.log('🔧 Initializing other services...');
+        console.log('🔧 Step 2: Initializing other services...');
+        console.log('🌤️ Creating WeatherService...');
         weatherService = new WeatherService();
-        emailService = new EmailService();
-        stormAnalyzer = new StormAnalyzer();
+        console.log('✅ WeatherService created');
         
-        console.log('✅ All services initialized successfully');
+        console.log('📧 Creating EmailService...');
+        emailService = new EmailService();
+        console.log('✅ EmailService created');
+        
+        console.log('🌪️ Creating StormAnalyzer...');
+        stormAnalyzer = new StormAnalyzer();
+        console.log('✅ StormAnalyzer created');
+        
+        console.log('🎉 ===== ALL SERVICES INITIALIZED SUCCESSFULLY =====');
         return true;
     } catch (error) {
+        console.error('🚨 ===== SERVICE INITIALIZATION FAILED =====');
         console.error('❌ Failed to initialize services:', error);
-        console.error('Stack trace:', error.stack);
+        console.error('📚 Stack trace:', error.stack);
         throw error;
     }
 }
@@ -590,22 +602,31 @@ async function checkForStormsAndAlert() {
 // Start server function
 async function startServer() {
     try {
-        console.log('Starting Storm Alert System...');
-        console.log('Environment:', process.env.NODE_ENV || 'development');
-        console.log('Port:', PORT);
+        console.log('🚀 ===== STARTING STORM ALERT SYSTEM =====');
+        console.log('📊 Environment:', process.env.NODE_ENV || 'development');
+        console.log('🔌 Port:', PORT);
+        console.log('🌐 Railway URL:', process.env.RAILWAY_PUBLIC_DOMAIN || 'not set');
+        console.log('📧 Resend API Key:', process.env.RESEND_API_KEY ? 'SET' : 'NOT SET');
+        console.log('💾 DB Backup:', process.env.DB_BACKUP ? 'SET' : 'NOT SET');
+        
+        console.log('🔧 Creating Express server...');
         
         // Start the server FIRST so it can respond to health checks
         const server = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`Storm Alert System running on port ${PORT}`);
-            console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+            console.log('✅ HTTP SERVER STARTED SUCCESSFULLY');
+            console.log(`🌍 Server listening on port ${PORT}`);
+            console.log(`🔗 Environment: ${process.env.NODE_ENV || 'development'}`);
+            console.log('🩺 Health check available at /health');
+            
+            console.log('🔄 Starting background service initialization...');
             
             // Initialize services AFTER server is running
             initializeServices().then(() => {
-                console.log('🎉 Server fully initialized and ready');
+                console.log('🎉 ALL SERVICES INITIALIZED SUCCESSFULLY');
                 
                 // Set up cron job only after everything is ready
                 if (process.env.NODE_ENV === 'production') {
-                    console.log('Setting up production cron job...');
+                    console.log('⏰ Setting up production cron job...');
                     
                     // Set up regular cron job for every 2 hours
                     cron.schedule('0 */2 * * *', async () => {
@@ -614,42 +635,50 @@ async function startServer() {
                     
                     console.log('✅ Cron job scheduled for every 2 hours');
                 } else {
-                    console.log('Development mode - cron job disabled');
+                    console.log('🛠️ Development mode - cron job disabled');
                 }
             }).catch((error) => {
-                console.error('❌ Failed to initialize services:', error);
+                console.error('❌ SERVICE INITIALIZATION FAILED:', error);
+                console.error('📚 Stack trace:', error.stack);
                 // Don't exit - server can still respond to basic requests
+                console.log('⚠️ Server will continue running with limited functionality');
             });
         });
 
+        console.log('🔧 Setting up server error handlers...');
+
         // Handle server errors before they crash the process
         server.on('error', (error) => {
-            console.error('Server error occurred:', error);
+            console.error('🚨 SERVER ERROR OCCURRED:', error);
             if (error.code === 'EADDRINUSE') {
-                console.error(`Port ${PORT} is already in use.`);
+                console.error(`❌ Port ${PORT} is already in use.`);
                 process.exit(1);
             } else {
-                console.error('Unhandled server error:', error);
+                console.error('❌ Unhandled server error:', error);
                 process.exit(1);
             }
         });
 
+        console.log('🔧 Setting up process error handlers...');
+
         // Handle uncaught exceptions
         process.on('uncaughtException', (error) => {
-            console.error('Uncaught Exception:', error);
-            console.error('Stack:', error.stack);
+            console.error('🚨 UNCAUGHT EXCEPTION:', error);
+            console.error('📚 Stack:', error.stack);
             process.exit(1);
         });
 
         // Handle unhandled promise rejections
         process.on('unhandledRejection', (reason, promise) => {
-            console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+            console.error('🚨 UNHANDLED REJECTION at:', promise, 'reason:', reason);
             process.exit(1);
         });
 
+        console.log('✅ Server startup configuration complete');
+
     } catch (error) {
-        console.error('Failed to start server:', error);
-        console.error('Stack trace:', error.stack);
+        console.error('🚨 CRITICAL: Failed to start server:', error);
+        console.error('📚 Stack trace:', error.stack);
         process.exit(1);
     }
 }
