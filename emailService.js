@@ -5,6 +5,11 @@ require('dotenv').config();
 
 class EmailService {
     constructor() {
+        if (!process.env.RESEND_API_KEY) {
+            console.error('FATAL ERROR: RESEND_API_KEY environment variable is not set.');
+            throw new Error('FATAL ERROR: RESEND_API_KEY environment variable is not set.');
+        }
+        
         this.transporter = nodemailer.createTransport({
             host: 'smtp.resend.com',
             secure: true,
