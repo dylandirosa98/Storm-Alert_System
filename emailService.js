@@ -19,6 +19,7 @@ class EmailService {
                 pass: process.env.RESEND_API_KEY
             }
         });
+        this.fromAddress = 'info@pythonwebsolutions.com';
         this.unsubscribeSecret = process.env.UNSUBSCRIBE_SECRET || 'your-default-secret';
     }
 
@@ -65,7 +66,7 @@ class EmailService {
                 const personalizedHtml = html.replace('UNSUBSCRIBE_LINK_PLACEHOLDER', unsubscribeLink);
                 
                 await this.transporter.sendMail({
-                    from: 'alerts@storm-alert-system.com',
+                    from: this.fromAddress,
                     to: company.email,
                     subject: subject,
                     html: personalizedHtml,
@@ -113,7 +114,7 @@ class EmailService {
                 const personalizedHtml = html.replace('UNSUBSCRIBE_LINK_PLACEHOLDER', unsubscribeLink);
                 
                 await this.transporter.sendMail({
-                    from: 'alerts@storm-alert-system.com',
+                    from: this.fromAddress,
                     to: company.email,
                     subject: subject,
                     html: personalizedHtml,
@@ -154,7 +155,7 @@ class EmailService {
 
         try {
             await this.transporter.sendMail({
-                from: 'alerts@storm-alert-system.com',
+                from: this.fromAddress,
                 to: email,
                 subject: subject,
                 html: htmlContent,
@@ -188,7 +189,7 @@ class EmailService {
 
         try {
             await this.transporter.sendMail({
-                from: 'alerts@storm-alert-system.com',
+                from: this.fromAddress,
                 to: 'dylandirosa980@gmail.com',
                 subject: subject,
                 html: htmlContent,
@@ -256,24 +257,44 @@ class EmailService {
             });
 
             if (!subscriptionResponse.ok) {
-                const errorText = await subscriptionResponse.text();
-                console.error('Subscription failed:', errorText);
-                throw new Error(`Newsletter subscription failed: ${subscriptionResponse.status} ${subscriptionResponse.statusText} - ${errorText}`);
+                const errorData = await subscriptionResponse.json();
+                throw new Error(`Failed to subscribe to newsletter: ${errorData.message || 'Unknown error'}`);
             }
 
-            const result = await subscriptionResponse.json();
-            console.log(`✅ Successfully subscribed ${email} to ${publication.name} newsletter via beehiiv API`);
-            console.log('Subscription result:', result);
-            return result;
+            console.log('Successfully subscribed to newsletter:', email);
         } catch (error) {
-            console.error('❌ Failed to subscribe to newsletter via beehiiv API:', error);
-            // Don't throw error to prevent blocking main subscription
-            return null;
+            console.error('Error subscribing to newsletter:', error);
+            // Don't re-throw, so email sending can continue
         }
     }
 
     async sendRecentStormAlert(company, stormData, state, createdAt) {
-        // ... This can be deprecated or updated to use the new consolidated format
+        const subject = `Recent Storm Alert for ${state}`;
+        const htmlContent = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h1 style="color: #2a5298;">Recent Storm In Your Area</h1>
+                <p>As a new subscriber, here is an example of a recent significant storm that occurred in <strong>${state}</strong> on <strong>${new Date(createdAt).toLocaleDateString()}</strong>.</p>
+                
+                <h3>Storm Details:</h3>
+                <p><strong>Event:</strong> ${stormData.event}</p>
+                <p><strong>Description:</strong> ${stormData.description}</p>
+                <p><strong>Areas Affected:</strong> ${stormData.areaDesc}</p>
+            </div>
+        `;
+
+        try {
+            await this.transporter.sendMail({
+                from: this.fromAddress,
+                to: company.email,
+                subject: subject,
+                html: htmlContent,
+                headers: { 'X-Entity-ID': 'your-entity-id' }
+            });
+            console.log(`Sent recent storm alert to ${company.email}`);
+        } catch (error) {
+            console.error('Error sending recent storm alert:', error);
+            // Don't rethrow, as this is a non-critical email
+        }
     }
 }
 
