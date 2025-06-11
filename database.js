@@ -2,160 +2,103 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
+// Helper to promisify db.run
+const run = (db, sql, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+            if (err) {
+                console.error('Error running sql: ', sql);
+                console.error(err);
+                reject(err);
+            } else {
+                resolve(this);
+            }
+        });
+    });
+};
+
 class Database {
     constructor() {
         this.db = null;
     }
 
-    initialize() {
-        return new Promise((resolve, reject) => {
+    async initialize() {
+        try {
+            const dbPath = path.join(__dirname, 'storm_alerts.db');
+            console.log('Database path:', dbPath);
+
+            this.db = new sqlite3.Database(dbPath, (err) => {
+                if (err) {
+                    console.error('Error opening database file:', err);
+                    throw err; // This will be caught by the outer try/catch
+                }
+            });
+
+            console.log('Database file opened successfully. Initializing schema...');
+
+            await run(this.db, 'PRAGMA foreign_keys = ON');
+
+            await run(this.db, `
+                CREATE TABLE IF NOT EXISTS companies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    company_name TEXT NOT NULL,
+                    email TEXT NOT NULL UNIQUE,
+                    phone TEXT,
+                    contact_name TEXT NOT NULL,
+                    states TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    active BOOLEAN DEFAULT 1
+                )
+            `);
+            console.log('Table "companies" created or verified.');
+
+            await run(this.db, `
+                CREATE TABLE IF NOT EXISTS storm_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    state TEXT NOT NULL,
+                    event_data TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('Table "storm_events" created or verified.');
+
+            await run(this.db, `
+                CREATE TABLE IF NOT EXISTS unsubscribes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL,
+                    zip_codes TEXT,
+                    unsubscribe_token TEXT UNIQUE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    all_alerts BOOLEAN DEFAULT FALSE
+                )
+            `);
+            console.log('Table "unsubscribes" created or verified.');
+
+            // Clean up duplicate emails, ensuring we keep the most recent subscription.
+            await run(this.db, `
+                DELETE FROM companies 
+                WHERE id NOT IN (
+                    SELECT MAX(id) 
+                    FROM companies 
+                    GROUP BY email
+                )
+            `);
+            console.log('Duplicate emails cleaned up.');
+
+            console.log('✅ Database schema initialized successfully.');
+
+            // Auto-restore from backup if available, but don't let it crash startup
             try {
-                // Use SQLite with a persistent approach
-                const dbPath = path.join(__dirname, 'storm_alerts.db');
-                
-                console.log('Database path:', dbPath);
-                console.log('Environment:', process.env.NODE_ENV);
-                
-                this.db = new sqlite3.Database(dbPath, (err) => {
-                    if (err) {
-                        console.error('Error opening database:', err);
-                        reject(err);
-                        return;
-                    }
-
-                    console.log('Database file opened successfully');
-
-                    // Enable foreign keys
-                    this.db.run('PRAGMA foreign_keys = ON', (err) => {
-                        if (err) {
-                            console.error('Error enabling foreign keys:', err);
-                            reject(err);
-                            return;
-                        }
-
-                        // Create tables in sequence
-                        this.db.serialize(() => {
-                            let tablesCreated = 0;
-                            const totalTables = 3;
-
-                            // Companies table with UNIQUE email constraint
-                            this.db.run(`
-                                CREATE TABLE IF NOT EXISTS companies (
-                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    company_name TEXT NOT NULL,
-                                    email TEXT NOT NULL UNIQUE,
-                                    phone TEXT,
-                                    contact_name TEXT NOT NULL,
-                                    states TEXT NOT NULL,
-                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                    active BOOLEAN DEFAULT 1
-                                )
-                            `, (err) => {
-                                if (err) {
-                                    console.error('Error creating companies table:', err);
-                                    reject(err);
-                                    return;
-                                }
-                                console.log('Companies table created/verified');
-                                tablesCreated++;
-                                
-                                if (tablesCreated === totalTables) {
-                                    console.log('All database tables initialized successfully');
-                                    // Auto-restore from backup if available
-                                    this.restoreFromBackup().then(() => {
-                                        resolve();
-                                    }).catch((restoreError) => {
-                                        console.log('No backup to restore or restore failed:', restoreError.message);
-                                        resolve(); // Continue even if restore fails
-                                    });
-                                }
-                            });
-
-                            // Storm events table
-                            this.db.run(`
-                                CREATE TABLE IF NOT EXISTS storm_events (
-                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    state TEXT NOT NULL,
-                                    event_data TEXT NOT NULL,
-                                    severity TEXT NOT NULL,
-                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                                )
-                            `, (err) => {
-                                if (err) {
-                                    console.error('Error creating storm_events table:', err);
-                                    reject(err);
-                                    return;
-                                }
-                                console.log('Storm events table created/verified');
-                                tablesCreated++;
-                                
-                                if (tablesCreated === totalTables) {
-                                    console.log('All database tables initialized successfully');
-                                    // Auto-restore from backup if available
-                                    this.restoreFromBackup().then(() => {
-                                        resolve();
-                                    }).catch((restoreError) => {
-                                        console.log('No backup to restore or restore failed:', restoreError.message);
-                                        resolve(); // Continue even if restore fails
-                                    });
-                                }
-                            });
-
-                            // Unsubscribes table
-                            this.db.run(`
-                                CREATE TABLE IF NOT EXISTS unsubscribes (
-                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    email TEXT NOT NULL,
-                                    zip_codes TEXT,
-                                    unsubscribe_token TEXT UNIQUE,
-                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                                    all_alerts BOOLEAN DEFAULT FALSE
-                                )
-                            `, (err) => {
-                                if (err) {
-                                    console.error('Error creating unsubscribes table:', err);
-                                    reject(err);
-                                    return;
-                                }
-                                console.log('Unsubscribes table created/verified');
-                                tablesCreated++;
-                                
-                                if (tablesCreated === totalTables) {
-                                    console.log('All database tables initialized successfully');
-                                    // Auto-restore from backup if available
-                                    this.restoreFromBackup().then(() => {
-                                        resolve();
-                                    }).catch((restoreError) => {
-                                        console.log('No backup to restore or restore failed:', restoreError.message);
-                                        resolve(); // Continue even if restore fails
-                                    });
-                                }
-                            });
-
-                            // Remove duplicate emails after tables are created
-                            this.db.run(`
-                                DELETE FROM companies 
-                                WHERE id NOT IN (
-                                    SELECT MAX(id) 
-                                    FROM companies 
-                                    GROUP BY email
-                                )
-                            `, (err) => {
-                                if (err) {
-                                    console.error('Error removing duplicate emails:', err);
-                                    // Don't reject here, just log the error
-                                } else {
-                                    console.log('Duplicate emails cleaned up');
-                                }
-                            });
-                        });
-                    });
-                });
-            } catch (error) {
-                console.error('Database initialization error:', error);
-                reject(error);
+                await this.restoreFromBackup();
+            } catch (restoreError) {
+                console.log('ℹ️ No backup to restore or restore failed:', restoreError.message);
             }
-        });
+
+        } catch (error) {
+            console.error('❌ CRITICAL: Database initialization failed:', error);
+            throw error; // Re-throw error to halt server startup if db fails
+        }
     }
 
     // Backup database data to environment variable
