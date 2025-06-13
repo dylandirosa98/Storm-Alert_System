@@ -190,6 +190,54 @@ app.get('/api/health', (req, res) => {
     res.json(healthStatus);
 });
 
+// Test endpoint to check storm detection across all states
+app.get('/api/test-storm-detection', async (req, res) => {
+    try {
+        if (!weatherService || !stormAnalyzer || !db) {
+            return res.status(503).json({ error: 'Services not initialized' });
+        }
+
+        const results = {};
+        const subscribedStates = await db.getSubscribedStates();
+        
+        for (const state of subscribedStates) {
+            console.log(`\n🔍 Testing ${state}...`);
+            
+            try {
+                const alerts = await weatherService.getComprehensiveWeatherAlerts(state);
+                const stormDataArray = await stormAnalyzer.analyzeStorms(alerts, state);
+                const companies = await db.getCompaniesByState(state);
+                
+                results[state] = {
+                    totalAlerts: alerts.length,
+                    qualifyingStorms: stormDataArray.length,
+                    subscribedCompanies: companies.length,
+                    storms: stormDataArray.map(s => ({
+                        event: s.event,
+                        hailSize: s.hailSize,
+                        windSpeed: s.windSpeed,
+                        area: s.areaDesc
+                    }))
+                };
+            } catch (error) {
+                results[state] = { error: error.message };
+            }
+        }
+        
+        // Summary
+        const summary = {
+            totalStates: subscribedStates.length,
+            statesWithStorms: Object.keys(results).filter(s => results[s].qualifyingStorms > 0).length,
+            totalQualifyingStorms: Object.values(results).reduce((sum, r) => sum + (r.qualifyingStorms || 0), 0)
+        };
+        
+        res.json({ summary, results });
+    } catch (error) {
+        console.error('Test detection error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Database migration endpoint
 app.get('/api/migrate-database', async (req, res) => {
     try {

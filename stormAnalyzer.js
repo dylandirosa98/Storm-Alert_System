@@ -9,28 +9,71 @@ class StormAnalyzer {
 
             const ugcCodes = alert.properties.geocode?.UGC || [];
 
-            const hailSizeMatch = description.match(/([0-9.]+)\s?(inch|inches)/i);
-            const hailSize = hailSizeMatch ? parseFloat(hailSizeMatch[1]) : 0;
-
-            let windSpeed = 0;
-            const hazardWindMatch = description.match(/HAZARD[.\\s]*?([0-9]+)\\s*mph\\s*wind/i);
-            const generalWindMatch = description.match(/(?:wind gusts?|sustained winds?|winds?)\\s*(?:up to|gusting to|of)?\\s*([0-9]+)\\s*mph/i);
+            // Extract hail size - use the same comprehensive approach as weatherService
+            let hailSize = 0;
+            const fullText = description + " " + headline;
+            let potentialHailSizes = [];
             
-            if (hazardWindMatch) {
-                windSpeed = parseFloat(hazardWindMatch[1]);
-            } else if (generalWindMatch) {
-                windSpeed = parseFloat(generalWindMatch[1]);
+            // Check for max hail size parameter
+            const maxHailRegex = /\* max hail size\.*(\d+(?:\.\d+)?)\s*in/ig;
+            let match;
+            while ((match = maxHailRegex.exec(description)) !== null) {
+                potentialHailSizes.push(parseFloat(match[1]));
             }
             
-            // If it's a severe thunderstorm warning with no parsed values, set a default
-            // to ensure it's processed, as it's inherently severe.
-            if (event.includes('Severe Thunderstorm Warning') && windSpeed < 58 && hailSize < 1.0) {
-                 console.log(`   ⚠️ Severe Thunderstorm Warning with low parsed values. Setting default wind to 58mph.`);
-                 windSpeed = 58;
+            // Check for general hail mentions
+            const generalHailRegex = /(?:hail(?: of| up to)?|size hail)\s*\(?(\d+(?:\.\d+)?)\s*in(?:ch(?:es)?)?\)?/ig;
+            while ((match = generalHailRegex.exec(fullText)) !== null) {
+                potentialHailSizes.push(parseFloat(match[1]));
+            }
+            
+            if (potentialHailSizes.length > 0) {
+                hailSize = Math.max(...potentialHailSizes);
+            }
+
+            // Extract wind speed - use the same comprehensive approach as weatherService
+            let windSpeed = 0;
+            let potentialWindSpeeds = [];
+            
+            // Check for max wind gust parameter
+            const maxWindRegex = /\* max wind gust\.*(\d+)\s*mph/ig;
+            while ((match = maxWindRegex.exec(description)) !== null) {
+                potentialWindSpeeds.push(parseFloat(match[1]));
+            }
+            
+            // Check for specific wind phrases
+            const specificWindRegex = /(?:wind gusts?(?: of)?|winds up to|wind speeds up to|gusts up to|wind speed of|sustained winds?|gusting to)\s*(\d+)\s*mph/ig;
+            while ((match = specificWindRegex.exec(fullText)) !== null) {
+                potentialWindSpeeds.push(parseFloat(match[1]));
+            }
+            
+            // Check for HAZARD wind mentions
+            const hazardWindRegex = /HAZARD[.\s]*?(\d+)\s*mph\s*wind/ig;
+            while ((match = hazardWindRegex.exec(description)) !== null) {
+                potentialWindSpeeds.push(parseFloat(match[1]));
+            }
+            
+            // For wind-related events, also check general mph mentions
+            if (event.toLowerCase().includes("wind") || event.toLowerCase().includes("thunderstorm") || 
+                event.toLowerCase().includes("hurricane") || event.toLowerCase().includes("tornado") || 
+                event.toLowerCase().includes("tropical storm")) {
+                const broaderWindRegex = /(\d+)\s*mph/ig;
+                while ((match = broaderWindRegex.exec(fullText)) !== null) {
+                    const speed = parseFloat(match[1]);
+                    // Only add if it's a reasonable wind speed (not a distance or other measurement)
+                    if (speed >= 20 && speed <= 200) {
+                        potentialWindSpeeds.push(speed);
+                    }
+                }
+            }
+            
+            if (potentialWindSpeeds.length > 0) {
+                windSpeed = Math.max(...potentialWindSpeeds);
             }
 
             console.log(`\n🌩️ Processing Alert: ${event} in ${areaDesc}`);
-            console.log(`   🧊 Hail Found: ${hailSize}" | 💨 Wind Found: ${windSpeed} mph`);
+            console.log(`   🧊 Hail Found: ${hailSize}" (from ${potentialHailSizes.length} values: [${potentialHailSizes.join(', ')}])`);
+            console.log(`   💨 Wind Found: ${windSpeed} mph (from ${potentialWindSpeeds.length} values: [${potentialWindSpeeds.join(', ')}])`);
 
             const isHurricane = /hurricane|tropical storm/i.test(event);
             const isHailRelevant = hailSize >= 1.0;
