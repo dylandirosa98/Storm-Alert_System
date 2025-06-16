@@ -49,11 +49,26 @@ class Database {
                     phone TEXT,
                     contact_name TEXT NOT NULL,
                     states TEXT NOT NULL,
+                    alert_preferences TEXT DEFAULT 'both',
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     active BOOLEAN DEFAULT 1
                 )
             `);
             console.log('Table "companies" created or verified.');
+
+            // Add alert_preferences column if it doesn't exist
+            await run(this.db, `
+                PRAGMA table_info(companies)
+            `).then(async () => {
+                try {
+                    await run(this.db, `
+                        ALTER TABLE companies ADD COLUMN alert_preferences TEXT DEFAULT 'both'
+                    `);
+                    console.log('Added alert_preferences column to companies table.');
+                } catch (err) {
+                    // Column already exists, ignore error
+                }
+            });
 
             await run(this.db, `
                 CREATE TABLE IF NOT EXISTS storm_events (
@@ -166,8 +181,8 @@ class Database {
     async addCompany(data) {
         const result = await new Promise((resolve, reject) => {
             const stmt = this.db.prepare(`
-                INSERT INTO companies (company_name, email, phone, contact_name, states)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO companies (company_name, email, phone, contact_name, states, alert_preferences)
+                VALUES (?, ?, ?, ?, ?, ?)
             `);
             
             stmt.run(
@@ -176,6 +191,7 @@ class Database {
                 data.phone,
                 data.contactName,
                 data.states,
+                data.alertPreferences || 'both',
                 function(err) {
                     if (err) reject(err);
                     else resolve(this.lastID);

@@ -93,7 +93,7 @@ app.get('/', (req, res) => {
 // Subscribe endpoint
 app.post('/api/subscribe', async (req, res) => {
     try {
-        const { companyName, email, phone, contactName, states, alertPreferences } = req.body;
+        const { companyName, email, phone, contactName, states } = req.body;
         
         if (!companyName || !email || !contactName || !states || states.length === 0) {
             return res.status(400).json({ error: 'Missing required fields' });
@@ -114,13 +114,12 @@ app.post('/api/subscribe', async (req, res) => {
                 email,
                 phone,
                 contactName,
-                states: states.join(','),
-                alertPreferences: alertPreferences || 'both'
+                states: states.join(',')
             });
 
             try {
                 // Send welcome email to the company
-                await emailService.sendWelcomeEmail(email, companyName, states, alertPreferences || 'both');
+                await emailService.sendWelcomeEmail(email, companyName, states);
                 
                 // Send notification to admin
                 await emailService.sendAdminNotification({
@@ -128,8 +127,7 @@ app.post('/api/subscribe', async (req, res) => {
                     email,
                     phone,
                     contactName,
-                    states,
-                    alertPreferences: alertPreferences || 'both'
+                    states
                 });
             } catch (emailError) {
                 console.error('Failed to send emails:', emailError);
@@ -794,31 +792,13 @@ async function runStormCheck() {
 
                 // --- SEND CONSOLIDATED EMAILS ---
                 if (hailAlerts.alertDetails.length > 0) {
-                    // Filter companies that want hail alerts
-                    const hailCompanies = companies.filter(c => 
-                        !c.alert_preferences || c.alert_preferences === 'both' || c.alert_preferences === 'hail'
-                    );
-                    
-                    if (hailCompanies.length > 0) {
-                        console.log(`\n🧊 Calling email service for HAIL alert in ${state} to ${hailCompanies.length} companies...`);
-                        await emailService.sendConsolidatedHailAlert(hailCompanies, state, hailAlerts);
-                    } else {
-                        console.log(`\n🧊 Hail alert found but no companies subscribed to hail alerts in ${state}`);
-                    }
+                    console.log(`\n🧊 Calling email service for HAIL alert in ${state} to ${companies.length} companies...`);
+                    await emailService.sendConsolidatedHailAlert(companies, state, hailAlerts);
                 }
 
                 if (windAlerts.alertDetails.length > 0) {
-                    // Filter companies that want wind alerts
-                    const windCompanies = companies.filter(c => 
-                        !c.alert_preferences || c.alert_preferences === 'both' || c.alert_preferences === 'wind'
-                    );
-                    
-                    if (windCompanies.length > 0) {
-                        console.log(`\n💨 Calling email service for WIND alert in ${state} to ${windCompanies.length} companies...`);
-                        await emailService.sendConsolidatedWindAlert(windCompanies, state, windAlerts);
-                    } else {
-                        console.log(`\n💨 Wind alert found but no companies subscribed to wind alerts in ${state}`);
-                    }
+                    console.log(`\n💨 Calling email service for WIND alert in ${state} to ${companies.length} companies...`);
+                    await emailService.sendConsolidatedWindAlert(companies, state, windAlerts);
                 }
 
             } catch (stateError) {

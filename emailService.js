@@ -128,15 +128,18 @@ class EmailService {
         console.log(`Consolidated wind alert processing complete for ${companies.length} subscribers for ${state}.`);
     }
     
-    async sendWelcomeEmail(email, companyName, states) {
+    async sendWelcomeEmail(email, companyName, states, alertPreferences = 'both') {
         // Subscribe to newsletter first - This is now handled in the main /api/subscribe route
         // await this.subscribeToNewsletter(email);
+
+        const alertTypeText = alertPreferences === 'both' ? 'hail and wind' : 
+                             alertPreferences === 'hail' ? 'hail' : 'wind';
 
         const subject = 'Welcome to Storm Alert Pro';
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h1 style="color: #2a5298;">Welcome ${companyName}!</h1>
-                <p>You're now receiving storm alerts for: <strong>${states.join(', ')}</strong></p>
+                <p>You're now receiving <strong>${alertTypeText}</strong> storm alerts for: <strong>${states.join(', ')}</strong></p>
                 <p>When severe weather impacts your service areas, you'll receive:</p>
                 <ul>
                     <li>Immediate storm notifications</li>
@@ -169,6 +172,9 @@ class EmailService {
     }
 
     async sendAdminNotification(data) {
+        const alertTypeText = data.alertPreferences === 'both' ? 'Both Hail & Wind' : 
+                             data.alertPreferences === 'hail' ? 'Hail Only' : 'Wind Only';
+        
         const subject = '🔔 New Company Registration';
         const htmlContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -180,6 +186,7 @@ class EmailService {
                         <li><strong>Contact Person:</strong> ${data.contactName}</li>
                         <li><strong>Email:</strong> ${data.email}</li>
                         <li><strong>Phone:</strong> ${data.phone || 'Not provided'}</li>
+                        <li><strong>Alert Preferences:</strong> ${alertTypeText}</li>
                         <li><strong>Selected States:</strong> ${data.states.join(', ')}</li>
                         <li><strong>Registration Time:</strong> ${new Date().toLocaleString()}</li>
                     </ul>
