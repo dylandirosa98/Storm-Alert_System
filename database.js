@@ -98,10 +98,7 @@ class Database {
                     expires_time DATETIME,
                     area_desc TEXT,
                     raw_data TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_state (state),
-                    INDEX idx_onset (onset_time),
-                    INDEX idx_hail (hail_size)
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             `);
             console.log('Table "storm_history" created or verified.');
