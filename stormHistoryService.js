@@ -32,22 +32,22 @@ class StormHistoryService {
     }
 
     async generateStormHistoryPDF(weatherService, states, outputPath) {
-        console.log(`📄 Generating 12-month storm history PDF for states: ${states.join(', ')}`);
+        console.log(`Generating 12-month hail history PDF for states: ${states.join(', ')}`);
         
         try {
             // Collect storm data for the past 12 months
             const stormData = await this.collectStormHistory(weatherService, states);
             
-            // Filter and process the data
+            // Filter and process the data (hail only)
             const processedData = this.processStormData(stormData);
             
             // Generate the PDF
             const pdfPath = await this.createPDF(processedData, states, outputPath);
             
-            console.log(`✅ Storm history PDF generated: ${pdfPath}`);
+            console.log(`Hail history PDF generated: ${pdfPath}`);
             return pdfPath;
         } catch (error) {
-            console.error('❌ Error generating storm history PDF:', error);
+            console.error('Error generating hail history PDF:', error);
             throw error;
         }
     }
@@ -58,11 +58,13 @@ class StormHistoryService {
         twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
         
         for (const state of states) {
-            console.log(`📊 Collecting historical data for ${state}...`);
+            console.log(`Collecting historical hail data for ${state}...`);
             
             try {
                 // Get historical alerts for the past 12 months (8760 hours)
+                // Increase the hours to ensure we capture all data
                 const alerts = await weatherService.getRecentHistoricalAlerts(state, 8760);
+                console.log(`Found ${alerts.length} total alerts for ${state}`);
                 
                 for (const alert of alerts) {
                     const stormInfo = this.extractStormInfo(alert, state);
@@ -70,11 +72,37 @@ class StormHistoryService {
                         allStorms.push(stormInfo);
                     }
                 }
+                
+                // Also check for any missed alerts by querying different zones
+                const stateZones = weatherService.stateZones[state];
+                if (stateZones && stateZones.length > 0) {
+                    for (const zone of stateZones.slice(0, 3)) { // Check first 3 zones for better coverage
+                        try {
+                            const zoneAlerts = await weatherService.getHistoricalAlertsByZone(zone, 8760);
+                            for (const alert of zoneAlerts) {
+                                const stormInfo = this.extractStormInfo(alert, state);
+                                if (stormInfo && this.meetsFilterCriteria(stormInfo)) {
+                                    // Check if we already have this storm
+                                    const isDuplicate = allStorms.some(s => 
+                                        s.date.getTime() === stormInfo.date.getTime() &&
+                                        s.county === stormInfo.county
+                                    );
+                                    if (!isDuplicate) {
+                                        allStorms.push(stormInfo);
+                                    }
+                                }
+                            }
+                        } catch (zoneError) {
+                            console.error(`Error fetching zone ${zone} data:`, zoneError.message);
+                        }
+                    }
+                }
             } catch (error) {
                 console.error(`Error collecting data for ${state}:`, error);
             }
         }
         
+        console.log(`Total hail events found: ${allStorms.length}`);
         return allStorms;
     }
 
@@ -106,44 +134,17 @@ class StormHistoryService {
             }
         }
         
-        // Extract wind speed
-        let windSpeed = 0;
-        const windRegex = /(?:wind gusts?(?: of)?|winds up to|wind speeds up to|gusts up to|wind speed of|sustained winds?|gusting to)\s*(\d+)\s*mph/ig;
-        while ((match = windRegex.exec(fullText)) !== null) {
-            const speed = parseFloat(match[1]);
-            if (speed > windSpeed) {
-                windSpeed = speed;
-            }
+        // Only include if it has hail >= 0.75"
+        if (hailSize < 0.75) {
+            return null;
         }
         
-        // Determine event type and severity
-        let eventType = '';
+        // Determine severity based on hail size only
         let severity = 'Moderate';
-        
-        if (hailSize >= 0.75) {
-            eventType = 'Hail';
-            if (hailSize >= 2.0) {
-                severity = 'Extreme';
-            } else if (hailSize >= 1.5) {
-                severity = 'Severe';
-            }
-        }
-        
-        if (windSpeed >= 70) {
-            if (eventType) {
-                eventType = 'Hail + Wind';
-            } else {
-                eventType = 'Wind';
-            }
-            if (windSpeed >= 90) {
-                severity = 'Extreme';
-            } else if (windSpeed >= 80) {
-                severity = 'Severe';
-            }
-        }
-        
-        if (!eventType) {
-            return null; // Doesn't meet criteria
+        if (hailSize >= 2.0) {
+            severity = 'Extreme';
+        } else if (hailSize >= 1.5) {
+            severity = 'Severe';
         }
         
         // Extract county from areaDesc
@@ -159,20 +160,19 @@ class StormHistoryService {
             date: new Date(props.onset || props.effective || props.sent),
             county: county,
             state: state,
-            eventType: eventType,
+            eventType: 'Hail',
             hailSize: hailSize,
             hailSizeName: hailSizeName,
-            windSpeed: windSpeed,
             description: shortDescription,
             severity: severity,
             // For ranking
-            rankScore: (hailSize * 100) + windSpeed
+            rankScore: hailSize * 100
         };
     }
 
     meetsFilterCriteria(stormInfo) {
-        // Include if hail >= 0.75" OR wind >= 70 mph
-        return stormInfo.hailSize >= 0.75 || stormInfo.windSpeed >= 70;
+        // Only include hail >= 0.75"
+        return stormInfo.hailSize >= 0.75;
     }
 
     processStormData(storms) {
@@ -199,13 +199,11 @@ class StormHistoryService {
             monthData.storms.sort((a, b) => b.rankScore - a.rankScore);
         }
         
-        // Calculate totals
-        const hailCount = storms.filter(s => s.eventType.includes('Hail')).length;
-        const windCount = storms.filter(s => s.eventType === 'Wind').length;
+        // Calculate totals (hail only)
+        const hailCount = storms.length;
         
         return {
             totalHailEvents: hailCount,
-            totalWindEvents: windCount,
             monthlyData: groupedByMonth,
             allStorms: storms.sort((a, b) => b.rankScore - a.rankScore)
         };
@@ -220,7 +218,8 @@ class StormHistoryService {
                     bottom: 50,
                     left: 50,
                     right: 50
-                }
+                },
+                autoFirstPage: false
             });
 
             const filename = outputPath || path.join(__dirname, 'temp', `storm-history-${Date.now()}.pdf`);
@@ -234,10 +233,13 @@ class StormHistoryService {
             const stream = fs.createWriteStream(filename);
             doc.pipe(stream);
 
+            // Add first page
+            doc.addPage();
+
             // Title
             doc.fontSize(24)
                .font('Helvetica-Bold')
-               .text('12-Month Storm History Report', { align: 'center' });
+               .text('12-Month Hail History Report', { align: 'center' });
             
             doc.moveDown();
             
@@ -257,7 +259,7 @@ class StormHistoryService {
             doc.fontSize(12)
                .font('Helvetica')
                .fillColor('black')
-               .text(`In the past 12 months, your area experienced ${processedData.totalHailEvents} hail events (≥ 0.75") and ${processedData.totalWindEvents} wind events (≥ 70 mph).`);
+               .text(`In the past 12 months, your area experienced ${processedData.totalHailEvents} hail events (0.75" or larger).`);
             
             doc.moveDown(2);
             
@@ -265,12 +267,20 @@ class StormHistoryService {
             const sortedMonths = Object.values(processedData.monthlyData)
                 .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
             
+            let currentPage = 1;
+            
             for (const monthData of sortedMonths) {
+                // Check if we need a new page for the month header
+                if (doc.y > 650) {
+                    doc.addPage();
+                    currentPage++;
+                }
+                
                 // Month header
                 doc.fontSize(16)
                    .font('Helvetica-Bold')
                    .fillColor('#2a5298')
-                   .text(`🗓️ ${this.monthNames[monthData.month]} ${monthData.year}`);
+                   .text(`${this.monthNames[monthData.month]} ${monthData.year}`);
                 
                 doc.moveDown(0.5);
                 
@@ -279,6 +289,7 @@ class StormHistoryService {
                     // Check if we need a new page
                     if (doc.y > 650) {
                         doc.addPage();
+                        currentPage++;
                     }
                     
                     // Storm entry
@@ -291,17 +302,11 @@ class StormHistoryService {
                     doc.fontSize(10)
                        .font('Helvetica');
                     
-                    let details = `Type: ${storm.eventType}`;
-                    if (storm.hailSize > 0) {
-                        details += ` | Hail: ${storm.hailSize}"`;
-                        if (storm.hailSizeName) {
-                            details += ` (${storm.hailSizeName})`;
-                        }
+                    let details = `Hail Size: ${storm.hailSize}"`;
+                    if (storm.hailSizeName) {
+                        details += ` (${storm.hailSizeName})`;
                     }
-                    if (storm.windSpeed > 0) {
-                        details += ` | Wind: ${storm.windSpeed} mph`;
-                    }
-                    details += ` | Severity: [${storm.severity}]`;
+                    details += ` | Severity: ${storm.severity}`;
                     
                     doc.text(details);
                     
@@ -321,7 +326,11 @@ class StormHistoryService {
                 doc.moveDown();
             }
             
-            // Footer
+            // Footer on last page
+            if (doc.y > 700) {
+                doc.addPage();
+            }
+            
             doc.fontSize(8)
                .fillColor('#999')
                .text(`Generated on ${new Date().toLocaleDateString()} by Storm Alert Pro`, 

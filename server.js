@@ -126,17 +126,23 @@ app.post('/api/subscribe', async (req, res) => {
             // Generate storm history PDF if requested
             let stormHistoryPdfPath = null;
             if (includeStormHistory) {
-                try {
-                    console.log('📄 User requested storm history PDF, generating...');
-                    stormHistoryPdfPath = await stormHistoryService.generateStormHistoryPDF(
-                        weatherService,
-                        states,
-                        null // Will use default path
-                    );
-                    console.log('✅ Storm history PDF generated successfully');
-                } catch (pdfError) {
-                    console.error('❌ Failed to generate storm history PDF:', pdfError);
-                    // Continue without PDF
+                // Check if user selected more than 5 states
+                if (states.length > 5) {
+                    console.log('⚠️ User selected more than 5 states for PDF, skipping PDF generation');
+                    // We'll handle this in the email to explain why no PDF was attached
+                } else {
+                    try {
+                        console.log('📄 User requested storm history PDF, generating...');
+                        stormHistoryPdfPath = await stormHistoryService.generateStormHistoryPDF(
+                            weatherService,
+                            states,
+                            null // Will use default path
+                        );
+                        console.log('✅ Storm history PDF generated successfully');
+                    } catch (pdfError) {
+                        console.error('❌ Failed to generate storm history PDF:', pdfError);
+                        // Continue without PDF
+                    }
                 }
             }
 
@@ -147,7 +153,8 @@ app.post('/api/subscribe', async (req, res) => {
                     companyName, 
                     states, 
                     alertPreferences || 'both',
-                    stormHistoryPdfPath
+                    stormHistoryPdfPath,
+                    includeStormHistory
                 );
                 
                 // Send notification to admin

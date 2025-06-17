@@ -326,6 +326,18 @@ class WeatherService {
             'Wisconsin': 'WI',
             'Wyoming': 'WY'
         };
+        
+        // Initialize stateZones for easy access to zone IDs
+        this.stateZones = {};
+        for (const [state, offices] of Object.entries(this.stateOfficeMapping)) {
+            this.stateZones[state] = [];
+            for (const [office, data] of Object.entries(offices)) {
+                for (const zone of data.zones) {
+                    const zoneId = `${this.stateAbbreviations[state]}Z${zone.toString().padStart(3, '0')}`;
+                    this.stateZones[state].push(zoneId);
+                }
+            }
+        }
     }
 
     isRoofDamageRelevant(alert) {
@@ -667,6 +679,45 @@ class WeatherService {
             seen.add(key);
             return true;
         });
+    }
+
+    async getHistoricalAlertsByZone(zoneId, hoursBack = 8760) {
+        try {
+            console.log(`📡 Fetching historical alerts for zone ${zoneId} (past ${hoursBack} hours)...`);
+            
+            // Add delay to avoid rate limiting
+            await this.delay(1000);
+            
+            const alertsResponse = await axios.get(`${this.baseUrl}/alerts`, {
+                headers: {
+                    'User-Agent': this.userAgent,
+                    'Accept': 'application/geo+json'
+                },
+                params: {
+                    zone: zoneId,
+                    limit: 500
+                },
+                timeout: 15000
+            });
+
+            if (alertsResponse.data && alertsResponse.data.features) {
+                const alerts = alertsResponse.data.features;
+                const cutoffTime = new Date(Date.now() - (hoursBack * 60 * 60 * 1000));
+                
+                const historicalAlerts = alerts.filter(alert => {
+                    const onset = new Date(alert.properties.onset || alert.properties.sent);
+                    return onset >= cutoffTime && this.isRoofDamageRelevant(alert);
+                });
+                
+                console.log(`Found ${historicalAlerts.length} historical alerts for zone ${zoneId}`);
+                return historicalAlerts;
+            }
+            
+            return [];
+        } catch (error) {
+            console.error(`Error fetching historical alerts for zone ${zoneId}:`, error.message);
+            return [];
+        }
     }
 }
 

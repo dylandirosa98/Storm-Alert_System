@@ -244,7 +244,7 @@ class EmailService {
         console.log(`Consolidated wind alert processing complete for ${companies.length} subscribers for ${state}.`);
     }
     
-    async sendWelcomeEmail(email, companyName, states, alertPreferences = 'both', stormHistoryPdfPath = null) {
+    async sendWelcomeEmail(email, companyName, states, alertPreferences = 'both', stormHistoryPdfPath = null, includeStormHistory = false) {
         // Subscribe to newsletter first - This is now handled in the main /api/subscribe route
         // await this.subscribeToNewsletter(email);
 
@@ -268,7 +268,11 @@ class EmailService {
                 </p>
                 ${stormHistoryPdfPath ? `
                 <p style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">
-                    <strong>📄 Storm History Report:</strong> We've attached a 12-month storm history report for your selected areas, showing all significant hail (≥0.75") and wind (≥70 mph) events.
+                    <strong>📄 Hail History Report:</strong> We've attached a 12-month hail history report for your selected areas, showing all hail events ≥0.75" in diameter.
+                </p>
+                ` : states.length > 5 && includeStormHistory ? `
+                <p style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px;">
+                    <strong>⚠️ PDF Not Generated:</strong> You selected more than 5 states. To ensure complete data coverage, PDF generation is limited to 5 states or fewer.
                 </p>
                 ` : ''}
                 <p style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 8px;">
