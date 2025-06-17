@@ -194,6 +194,13 @@
         </div>
 
         <div class="form-group">
+            <label style="display: flex; align-items: center; font-weight: normal; cursor: pointer; background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 2px solid #e0e0e0;">
+                <input type="checkbox" id="includeStormHistory" name="includeStormHistory" style="margin-right: 0.75rem;">
+                <span style="font-weight: 600;">✔️ Include 12-Month Storm History PDF (hail + 70+ mph wind events in your area)</span>
+            </label>
+        </div>
+
+        <div class="form-group">
             <label>Select States for Storm Alerts *</label>
             <button type="button" class="select-all-btn" onclick="toggleAllStates()">Select/Deselect All</button>
             <div class="states-grid" id="statesGrid">
@@ -252,6 +259,7 @@
                 phone: document.getElementById('phone').value,
                 contactName: document.getElementById('contactName').value,
                 alertPreferences: document.querySelector('input[name="alertPreferences"]:checked').value,
+                includeStormHistory: document.getElementById('includeStormHistory').checked,
                 states: Array.from(document.querySelectorAll('input[name="states"]:checked'))
                     .map(cb => cb.value)
             };

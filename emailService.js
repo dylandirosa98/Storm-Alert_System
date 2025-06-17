@@ -244,7 +244,7 @@ class EmailService {
         console.log(`Consolidated wind alert processing complete for ${companies.length} subscribers for ${state}.`);
     }
     
-    async sendWelcomeEmail(email, companyName, states, alertPreferences = 'both') {
+    async sendWelcomeEmail(email, companyName, states, alertPreferences = 'both', stormHistoryPdfPath = null) {
         // Subscribe to newsletter first - This is now handled in the main /api/subscribe route
         // await this.subscribeToNewsletter(email);
 
@@ -266,6 +266,11 @@ class EmailService {
                 <p style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                     <strong>📧 Check your inbox!</strong> We're sending you a recent storm alert example from your selected states so you can see exactly what you'll receive when storms hit your areas.
                 </p>
+                ${stormHistoryPdfPath ? `
+                <p style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">
+                    <strong>📄 Storm History Report:</strong> We've attached a 12-month storm history report for your selected areas, showing all significant hail (≥0.75") and wind (≥70 mph) events.
+                </p>
+                ` : ''}
                 <p style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 8px;">
                     <strong>🎉 Bonus:</strong> You've also been subscribed to the Python Web Solutions newsletter for additional web development tips and insights!
                 </p>
@@ -273,14 +278,31 @@ class EmailService {
         `;
 
         try {
-            await this.transporter.sendMail({
+            const mailOptions = {
                 from: this.fromAddress,
                 to: email,
                 subject: subject,
                 html: htmlContent,
                 headers: { 'X-Entity-ID': 'your-entity-id' }
-            });
+            };
+
+            // Attach PDF if provided
+            if (stormHistoryPdfPath) {
+                const fs = require('fs');
+                const path = require('path');
+                
+                mailOptions.attachments = [{
+                    filename: `storm-history-${states.join('-')}.pdf`,
+                    path: stormHistoryPdfPath,
+                    contentType: 'application/pdf'
+                }];
+            }
+
+            await this.transporter.sendMail(mailOptions);
             console.log('Welcome email sent to:', email);
+            if (stormHistoryPdfPath) {
+                console.log('Storm history PDF attached');
+            }
         } catch (error) {
             console.error('Error sending welcome email:', error);
             throw error;
@@ -303,6 +325,7 @@ class EmailService {
                         <li><strong>Email:</strong> ${data.email}</li>
                         <li><strong>Phone:</strong> ${data.phone || 'Not provided'}</li>
                         <li><strong>Alert Preferences:</strong> ${alertTypeText}</li>
+                        <li><strong>Storm History PDF:</strong> ${data.includeStormHistory ? '✅ Requested' : '❌ Not requested'}</li>
                         <li><strong>Selected States:</strong> ${data.states.join(', ')}</li>
                         <li><strong>Registration Time:</strong> ${new Date().toLocaleString()}</li>
                     </ul>

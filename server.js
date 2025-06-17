@@ -5,6 +5,7 @@ const path = require('path');
 const WeatherService = require('./weatherService');
 const EmailService = require('./emailService');
 const StormAnalyzer = require('./stormAnalyzer');
+const StormHistoryService = require('./stormHistoryService');
 require('dotenv').config();
 
 const app = express();
@@ -44,43 +45,47 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // Initialize services
-let db, weatherService, emailService, stormAnalyzer;
+let db;
+let weatherService;
+let emailService;
+let stormAnalyzer;
+let stormHistoryService;
 
 // Initialize database and services
 async function initializeServices() {
+    console.log('🔧 Initializing services...');
+    
     try {
-        console.log('🔧 ===== INITIALIZING SERVICES =====');
-        console.log('💾 Step 1: Initializing database...');
-        
-        // Lazy-load Database here to avoid crashing if sqlite3 binding is missing during cold start
+        // Initialize database
+        console.log('💾 Initializing database...');
         const Database = require('./database');
-        
-        // Create a fresh database instance
         db = new Database();
-        console.log('✅ Database instance created');
-        
         await db.initialize();
-        console.log('✅ Database connection initialized successfully');
+        console.log('✅ Database initialized');
         
-        console.log('🔧 Step 2: Initializing other services...');
-        console.log('🌤️ Creating WeatherService...');
+        // Initialize weather service
+        console.log('🌤️ Initializing weather service...');
         weatherService = new WeatherService();
-        console.log('✅ WeatherService created');
+        console.log('✅ Weather service initialized');
         
-        console.log('📧 Creating EmailService...');
+        // Initialize email service
+        console.log('📧 Initializing email service...');
         emailService = new EmailService();
-        console.log('✅ EmailService created');
+        console.log('✅ Email service initialized');
         
-        console.log('🌪️ Creating StormAnalyzer...');
+        // Initialize storm analyzer
+        console.log('🔍 Initializing storm analyzer...');
         stormAnalyzer = new StormAnalyzer();
-        console.log('✅ StormAnalyzer created');
+        console.log('✅ Storm analyzer initialized');
         
-        console.log('🎉 ===== ALL SERVICES INITIALIZED SUCCESSFULLY =====');
-        return true;
+        // Initialize storm history service
+        console.log('📄 Initializing storm history service...');
+        stormHistoryService = new StormHistoryService();
+        console.log('✅ Storm history service initialized');
+        
+        console.log('✅ All services initialized successfully');
     } catch (error) {
-        console.error('🚨 ===== SERVICE INITIALIZATION FAILED =====');
-        console.error('❌ Failed to initialize services:', error);
-        console.error('📚 Stack trace:', error.stack);
+        console.error('❌ Service initialization failed:', error);
         throw error;
     }
 }
@@ -93,7 +98,7 @@ app.get('/', (req, res) => {
 // Subscribe endpoint
 app.post('/api/subscribe', async (req, res) => {
     try {
-        const { companyName, email, phone, contactName, states, alertPreferences } = req.body;
+        const { companyName, email, phone, contactName, states, alertPreferences, includeStormHistory } = req.body;
         
         if (!companyName || !email || !contactName || !states || states.length === 0) {
             return res.status(400).json({ error: 'Missing required fields' });
@@ -118,9 +123,32 @@ app.post('/api/subscribe', async (req, res) => {
                 alertPreferences: alertPreferences || 'both'
             });
 
+            // Generate storm history PDF if requested
+            let stormHistoryPdfPath = null;
+            if (includeStormHistory) {
+                try {
+                    console.log('📄 User requested storm history PDF, generating...');
+                    stormHistoryPdfPath = await stormHistoryService.generateStormHistoryPDF(
+                        weatherService,
+                        states,
+                        null // Will use default path
+                    );
+                    console.log('✅ Storm history PDF generated successfully');
+                } catch (pdfError) {
+                    console.error('❌ Failed to generate storm history PDF:', pdfError);
+                    // Continue without PDF
+                }
+            }
+
             try {
-                // Send welcome email to the company
-                await emailService.sendWelcomeEmail(email, companyName, states, alertPreferences || 'both');
+                // Send welcome email to the company (with PDF if generated)
+                await emailService.sendWelcomeEmail(
+                    email, 
+                    companyName, 
+                    states, 
+                    alertPreferences || 'both',
+                    stormHistoryPdfPath
+                );
                 
                 // Send notification to admin
                 await emailService.sendAdminNotification({
@@ -129,11 +157,23 @@ app.post('/api/subscribe', async (req, res) => {
                     phone,
                     contactName,
                     states,
-                    alertPreferences: alertPreferences || 'both'
+                    alertPreferences: alertPreferences || 'both',
+                    includeStormHistory: includeStormHistory
                 });
             } catch (emailError) {
                 console.error('Failed to send emails:', emailError);
                 // Don't return error to client, continue with subscription
+            }
+
+            // Clean up PDF file after sending
+            if (stormHistoryPdfPath) {
+                try {
+                    const fs = require('fs');
+                    fs.unlinkSync(stormHistoryPdfPath);
+                    console.log('🧹 Cleaned up temporary PDF file');
+                } catch (cleanupError) {
+                    console.error('Failed to clean up PDF:', cleanupError);
+                }
             }
 
             // Check for recent significant storms in their selected states

@@ -558,10 +558,18 @@ class WeatherService {
             let allHistoricalAlerts = [];
             const cutoffTime = new Date(Date.now() - (hoursBack * 60 * 60 * 1000));
             
-            // Get alerts from the past few hours using the general alerts endpoint
+            // Get alerts from the past specified hours using the general alerts endpoint
             try {
                 const stateAbbrev = this.stateAbbreviations[state];
                 console.log(`📡 Fetching recent alerts for ${state} (${stateAbbrev})...`);
+                
+                // For very long time ranges (like 12 months), we need to be more careful
+                // The NWS API has limits, so for long ranges we'll use a different approach
+                if (hoursBack > 720) { // More than 30 days
+                    console.log(`⚠️ Large time range requested (${hoursBack} hours). Using limited historical data.`);
+                    // For now, we'll get what we can from the API
+                    // In a production system, you'd want to store historical data in your database
+                }
                 
                 const alertsResponse = await axios.get(`${this.baseUrl}/alerts`, {
                     headers: {
