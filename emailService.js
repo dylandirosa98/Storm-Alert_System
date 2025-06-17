@@ -34,28 +34,144 @@ class EmailService {
     async sendConsolidatedHailAlert(companies, state, hailData) {
         const { maxHail, affectedAreas, alertDetails } = hailData;
         const uniqueAreas = [...new Set(affectedAreas)].join(', ');
-        const subject = `New Hail Alert in ${state} - Up to ${maxHail}" Hail Reported`;
+        
+        // Determine the highest tier from all alerts
+        let maxTier = 1;
+        let tierDescription = '';
+        let urgencyLevel = '';
+        let actionRecommendation = '';
+        
+        // Find the highest tier among all alerts
+        for (const alert of alertDetails) {
+            if (alert.hailTier > maxTier) {
+                maxTier = alert.hailTier;
+            }
+        }
+        
+        // Set tier-specific messaging
+        if (maxTier === 3) {
+            tierDescription = 'SEVERE HAIL ALERT';
+            urgencyLevel = '🚨 URGENT - CATASTROPHIC DAMAGE EXPECTED';
+            actionRecommendation = 'IMMEDIATE ACTION REQUIRED: Deploy all available crews. This is a major damage event with near 100% claim approval expected.';
+        } else if (maxTier === 2) {
+            tierDescription = 'MODERATE HAIL ALERT';
+            urgencyLevel = '⚠️ SIGNIFICANT - WIDESPREAD DAMAGE LIKELY';
+            actionRecommendation = 'RECOMMENDED ACTION: Prepare crews for deployment. Good opportunity for inspections with high claim potential.';
+        } else {
+            tierDescription = 'MINOR HAIL ALERT';
+            urgencyLevel = '📢 ADVISORY - POTENTIAL DAMAGE POSSIBLE';
+            actionRecommendation = 'SUGGESTED ACTION: Monitor situation and prepare for possible inspections. Some damage claims may be approved.';
+        }
+        
+        // Create subject based on tier
+        const subject = maxHail > 0 
+            ? `${tierDescription} - ${state} - Up to ${maxHail}" Hail Reported`
+            : `${tierDescription} - ${state} - Hail Activity Detected`;
 
         const bccList = companies.map(c => c.email).join(',');
+
+        // Group alerts by tier for better organization
+        const tierGroups = {
+            3: alertDetails.filter(d => d.hailTier === 3),
+            2: alertDetails.filter(d => d.hailTier === 2),
+            1: alertDetails.filter(d => d.hailTier === 1)
+        };
 
         const html = `
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
-                    /* styles omitted for brevity */
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: ${maxTier === 3 ? '#d32f2f' : maxTier === 2 ? '#f57c00' : '#388e3c'}; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                    .urgency { background: ${maxTier === 3 ? '#ffebee' : maxTier === 2 ? '#fff3e0' : '#e8f5e9'}; padding: 15px; margin: 10px 0; border-radius: 8px; font-weight: bold; }
+                    .content { background: #f5f5f5; padding: 20px; }
+                    .tier-section { margin: 20px 0; padding: 15px; background: white; border-radius: 8px; }
+                    .tier-3 { border-left: 5px solid #d32f2f; }
+                    .tier-2 { border-left: 5px solid #f57c00; }
+                    .tier-1 { border-left: 5px solid #388e3c; }
+                    .action-box { background: #e3f2fd; padding: 15px; margin: 20px 0; border-radius: 8px; border: 2px solid #1976d2; }
+                    .unsubscribe { color: #666; font-size: 12px; text-align: center; margin-top: 20px; }
+                    ul { margin: 10px 0; padding-left: 20px; }
+                    .hail-size { font-weight: bold; color: ${maxTier === 3 ? '#d32f2f' : maxTier === 2 ? '#f57c00' : '#388e3c'}; }
                 </style>
             </head>
             <body>
-                <h1>New Hail Alert for ${state}</h1>
-                <h2>Max Hail Size: ${maxHail} inches</h2>
-                <p><strong>Affected Areas:</strong> ${uniqueAreas}</p>
-                <p>Our system has detected severe weather with significant hail in your subscribed service area. This is a prime opportunity for storm-related roofing inspections.</p>
-                <h3>Alert Details:</h3>
-                <ul>
-                    ${alertDetails.map(d => `<li><strong>${d.event}:</strong> ${d.headline} (Effective: ${new Date(d.effective).toLocaleString()} - Expires: ${new Date(d.expires).toLocaleString()})</li>`).join('')}
-                </ul>
-                <a href="UNSUBSCRIBE_LINK_PLACEHOLDER" class="unsubscribe">Unsubscribe</a>
+                <div class="container">
+                    <div class="header">
+                        <h1>${tierDescription}</h1>
+                        <h2>${state}</h2>
+                    </div>
+                    
+                    <div class="urgency">${urgencyLevel}</div>
+                    
+                    <div class="content">
+                        ${maxHail > 0 ? `<h2>Maximum Hail Size Detected: <span class="hail-size">${maxHail} inches</span></h2>` : '<h2>Hail Activity Detected</h2>'}
+                        <p><strong>Affected Areas:</strong> ${uniqueAreas}</p>
+                        
+                        <div class="action-box">
+                            <strong>${actionRecommendation}</strong>
+                        </div>
+                        
+                        ${tierGroups[3].length > 0 ? `
+                        <div class="tier-section tier-3">
+                            <h3>🚨 SEVERE HAIL (≥1.75" / Golf Ball+)</h3>
+                            <ul>
+                                ${tierGroups[3].map(d => `
+                                    <li>
+                                        <strong>${d.event}:</strong> ${d.headline}
+                                        ${d.hailSize > 0 ? `<br><span class="hail-size">Hail Size: ${d.hailSize}"</span>` : ''}
+                                        <br><small>Active: ${new Date(d.effective).toLocaleString()} - ${new Date(d.expires).toLocaleString()}</small>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                        
+                        ${tierGroups[2].length > 0 ? `
+                        <div class="tier-section tier-2">
+                            <h3>⚠️ MODERATE HAIL (1.0" - 1.74" / Quarter to Golf Ball)</h3>
+                            <ul>
+                                ${tierGroups[2].map(d => `
+                                    <li>
+                                        <strong>${d.event}:</strong> ${d.headline}
+                                        ${d.hailSize > 0 ? `<br><span class="hail-size">Hail Size: ${d.hailSize}"</span>` : ''}
+                                        <br><small>Active: ${new Date(d.effective).toLocaleString()} - ${new Date(d.expires).toLocaleString()}</small>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                        
+                        ${tierGroups[1].length > 0 ? `
+                        <div class="tier-section tier-1">
+                            <h3>📢 MINOR HAIL (<1.0" / Smaller than Quarter)</h3>
+                            <ul>
+                                ${tierGroups[1].map(d => `
+                                    <li>
+                                        <strong>${d.event}:</strong> ${d.headline}
+                                        ${d.hailSize > 0 ? `<br><span class="hail-size">Hail Size: ${d.hailSize}"</span>` : ''}
+                                        <br><small>Active: ${new Date(d.effective).toLocaleString()} - ${new Date(d.expires).toLocaleString()}</small>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                        
+                        <h3>Why This Matters:</h3>
+                        <ul>
+                            ${maxTier === 3 ? '<li>Golf ball+ sized hail causes severe roof damage with extremely high claim approval rates</li>' : ''}
+                            ${maxTier >= 2 ? '<li>Quarter+ sized hail typically results in insurance claims for roof damage</li>' : ''}
+                            <li>Even small hail can cause damage to older or compromised roofing systems</li>
+                            <li>Early response gives you competitive advantage in the market</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="unsubscribe">
+                        <a href="UNSUBSCRIBE_LINK_PLACEHOLDER">Unsubscribe from alerts</a>
+                    </div>
+                </div>
             </body>
             </html>
         `;
@@ -76,7 +192,7 @@ class EmailService {
                 console.error(`❌ Failed to send consolidated hail alert to ${company.email}:`, error.message);
             }
         }
-        console.log(`Consolidated hail alert processing complete for ${companies.length} subscribers for ${state}.`);
+        console.log(`Consolidated hail alert (Tier ${maxTier}) processing complete for ${companies.length} subscribers for ${state}.`);
     }
 
     async sendConsolidatedWindAlert(companies, state, windData) {

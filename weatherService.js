@@ -336,6 +336,7 @@ class WeatherService {
 
         let hailSize = 0;
         let windSpeed = 0;
+        let hasHailMention = false;
 
         // --- Hail Parsing --- 
         let potentialHailSizes = [];
@@ -355,6 +356,52 @@ class WeatherService {
         
         if (potentialHailSizes.length > 0) {
             hailSize = Math.max(...potentialHailSizes);
+            hasHailMention = true;
+        }
+
+        // Check for common hail size terms
+        const hailSizeTerms = {
+            'pea size': 0.25,
+            'pea-size': 0.25,
+            'dime size': 0.75,
+            'dime-size': 0.75,
+            'nickel size': 0.88,
+            'nickel-size': 0.88,
+            'quarter size': 1.0,
+            'quarter-size': 1.0,
+            'half dollar': 1.25,
+            'ping pong ball': 1.5,
+            'ping-pong ball': 1.5,
+            'golf ball': 1.75,
+            'golf-ball': 1.75,
+            'hen egg': 2.0,
+            'tennis ball': 2.5,
+            'baseball': 2.75,
+            'softball': 4.0
+        };
+
+        // Check for hail size terms
+        for (const [term, size] of Object.entries(hailSizeTerms)) {
+            if (fullText.includes(term)) {
+                potentialHailSizes.push(size);
+                hasHailMention = true;
+                console.log(`[WeatherService] Found hail term: "${term}" = ${size} inches`);
+            }
+        }
+
+        // Update hailSize if we found any size terms
+        if (potentialHailSizes.length > 0) {
+            hailSize = Math.max(...potentialHailSizes);
+        }
+
+        // Check for any mention of hail even without size
+        if (fullText.includes('hail') && !hasHailMention) {
+            // Check for negative hail mentions
+            const negativeHailRegex = /no hail|without hail|hail not expected/i;
+            if (!negativeHailRegex.test(fullText)) {
+                hasHailMention = true;
+                console.log(`[WeatherService] Found hail mention without specific size`);
+            }
         }
 
         // --- Wind Parsing --- 
@@ -385,22 +432,23 @@ class WeatherService {
         }
 
         const originalEventForLog = alert.properties.event || "N/A";
-        if (hailSize > 0 || windSpeed > 0) { 
-            console.log(`[WeatherService DEBUG] Event: "${originalEventForLog}" | Potential Hail: [${potentialHailSizes.join(', ')}] -> Chosen: ${hailSize}in | Potential Wind: [${potentialWindSpeeds.join(', ')}] -> Chosen: ${windSpeed}mph`);
+        if (hailSize > 0 || windSpeed > 0 || hasHailMention) { 
+            console.log(`[WeatherService DEBUG] Event: "${originalEventForLog}" | Potential Hail: [${potentialHailSizes.join(', ')}] -> Chosen: ${hailSize}in | Has Hail Mention: ${hasHailMention} | Potential Wind: [${potentialWindSpeeds.join(', ')}] -> Chosen: ${windSpeed}mph`);
         }
 
-        const qualifiesByHail = hailSize >= 1.0;
+        // UPDATED: Accept ANY hail mention, not just >= 1.0 inch
+        const qualifiesByHail = hasHailMention;
         const qualifiesByWind = windSpeed >= 58;
         
         let relevant = qualifiesByHail || qualifiesByWind;
 
         if (relevant) {
-             console.log(`[WeatherService] Alert QUALIFIED: "${originalEventForLog}". Hail: ${hailSize}in (>=1.0: ${qualifiesByHail}), Wind: ${windSpeed}mph (>=58: ${qualifiesByWind})`);
+             console.log(`[WeatherService] Alert QUALIFIED: "${originalEventForLog}". Hail: ${hailSize}in (Any hail: ${qualifiesByHail}), Wind: ${windSpeed}mph (>=58: ${qualifiesByWind})`);
         } else {
             // Log only if some conditions were parsed but didn't meet strict thresholds, or if event type seems relevant
             const isPotentiallyInteresting = hailSize > 0 || windSpeed > 0 || event.includes("hail") || event.includes("wind") || event.includes("thunderstorm") || event.includes("tornado") || event.includes("hurricane") || event.includes("tropical storm") || event.includes("warning") || event.includes("watch");
             if (isPotentiallyInteresting) {
-                 console.log(`[WeatherService] Alert DID NOT QUALIFY: "${originalEventForLog}". Hail: ${hailSize}in (>=1.0: ${qualifiesByHail}), Wind: ${windSpeed}mph (>=58: ${qualifiesByWind})`);
+                 console.log(`[WeatherService] Alert DID NOT QUALIFY: "${originalEventForLog}". Hail: ${hailSize}in (Any hail: ${qualifiesByHail}), Wind: ${windSpeed}mph (>=58: ${qualifiesByWind})`);
             }
         }
         return relevant;

@@ -11,6 +11,7 @@ class StormAnalyzer {
 
             // Extract hail size - use the same comprehensive approach as weatherService
             let hailSize = 0;
+            let hasHailMention = false;
             const fullText = description + " " + headline;
             let potentialHailSizes = [];
             
@@ -29,6 +30,64 @@ class StormAnalyzer {
             
             if (potentialHailSizes.length > 0) {
                 hailSize = Math.max(...potentialHailSizes);
+                hasHailMention = true;
+            }
+
+            // Check for common hail size terms
+            const hailSizeTerms = {
+                'pea size': 0.25,
+                'pea-size': 0.25,
+                'dime size': 0.75,
+                'dime-size': 0.75,
+                'nickel size': 0.88,
+                'nickel-size': 0.88,
+                'quarter size': 1.0,
+                'quarter-size': 1.0,
+                'half dollar': 1.25,
+                'ping pong ball': 1.5,
+                'ping-pong ball': 1.5,
+                'golf ball': 1.75,
+                'golf-ball': 1.75,
+                'hen egg': 2.0,
+                'tennis ball': 2.5,
+                'baseball': 2.75,
+                'softball': 4.0
+            };
+
+            // Check for hail size terms
+            for (const [term, size] of Object.entries(hailSizeTerms)) {
+                if (fullText.toLowerCase().includes(term)) {
+                    potentialHailSizes.push(size);
+                    hasHailMention = true;
+                    console.log(`   🧊 Found hail term: "${term}" = ${size} inches`);
+                }
+            }
+
+            // Update hailSize if we found any size terms
+            if (potentialHailSizes.length > 0) {
+                hailSize = Math.max(...potentialHailSizes);
+            }
+
+            // Check for any mention of hail even without size
+            if (fullText.toLowerCase().includes('hail') && !hasHailMention) {
+                // Check for negative hail mentions
+                const negativeHailRegex = /no hail|without hail|hail not expected/i;
+                if (!negativeHailRegex.test(fullText)) {
+                    hasHailMention = true;
+                    console.log(`   🧊 Found hail mention without specific size`);
+                }
+            }
+
+            // Determine hail tier
+            let hailTier = 0;
+            if (hasHailMention) {
+                if (hailSize >= 1.75) {
+                    hailTier = 3; // Severe - Golf ball size and larger
+                } else if (hailSize >= 1.0) {
+                    hailTier = 2; // Moderate - Quarter size to golf ball
+                } else {
+                    hailTier = 1; // Minor - Any hail smaller than quarter size
+                }
             }
 
             // Extract wind speed - use the same comprehensive approach as weatherService
@@ -72,14 +131,14 @@ class StormAnalyzer {
             }
 
             console.log(`\n🌩️ Processing Alert: ${event} in ${areaDesc}`);
-            console.log(`   🧊 Hail Found: ${hailSize}" (from ${potentialHailSizes.length} values: [${potentialHailSizes.join(', ')}])`);
+            console.log(`   🧊 Hail Found: ${hailSize}" (from ${potentialHailSizes.length} values: [${potentialHailSizes.join(', ')}]) - Tier: ${hailTier}`);
             console.log(`   💨 Wind Found: ${windSpeed} mph (from ${potentialWindSpeeds.length} values: [${potentialWindSpeeds.join(', ')}])`);
 
             const isHurricane = /hurricane|tropical storm/i.test(event);
-            const isHailRelevant = hailSize >= 1.0;
+            const isHailRelevant = hasHailMention;
             const isWindRelevant = windSpeed >= 58;
             
-            // The alert must have either significant wind or hail to be processed further.
+            // The alert must have either hail mention or significant wind to be processed further.
             if (!isHailRelevant && !isWindRelevant && !isHurricane) {
                 console.log(`   ❌ Alert does not meet final criteria after parsing. Skipping.`);
                 continue;
@@ -90,6 +149,7 @@ class StormAnalyzer {
                 isWind: isWindRelevant,
                 isHurricane: isHurricane,
                 hailSize: hailSize,
+                hailTier: hailTier,
                 windSpeed: windSpeed,
                 areaDesc: areaDesc,
                 ugcCodes: ugcCodes,
