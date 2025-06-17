@@ -81,6 +81,36 @@ class Database {
             `);
             console.log('Table "storm_events" created or verified.');
 
+            // Create new table for detailed storm history
+            await run(this.db, `
+                CREATE TABLE IF NOT EXISTS storm_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alert_id TEXT UNIQUE NOT NULL,
+                    state TEXT NOT NULL,
+                    county TEXT,
+                    event_type TEXT NOT NULL,
+                    headline TEXT,
+                    description TEXT,
+                    hail_size REAL DEFAULT 0,
+                    hail_size_text TEXT,
+                    wind_speed REAL DEFAULT 0,
+                    onset_time DATETIME,
+                    expires_time DATETIME,
+                    area_desc TEXT,
+                    raw_data TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_state (state),
+                    INDEX idx_onset (onset_time),
+                    INDEX idx_hail (hail_size)
+                )
+            `);
+            console.log('Table "storm_history" created or verified.');
+
+            // Create indexes for better query performance
+            await run(this.db, `CREATE INDEX IF NOT EXISTS idx_storm_history_state_onset ON storm_history(state, onset_time)`);
+            await run(this.db, `CREATE INDEX IF NOT EXISTS idx_storm_history_hail_size ON storm_history(hail_size)`);
+            console.log('Storm history indexes created or verified.');
+
             await run(this.db, `
                 CREATE TABLE IF NOT EXISTS unsubscribes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -368,6 +398,95 @@ class Database {
             } else {
                 resolve();
             }
+        });
+    }
+
+    // Store storm alert in history
+    async storeStormAlert(alertData) {
+        return new Promise((resolve, reject) => {
+            const stmt = this.db.prepare(`
+                INSERT OR IGNORE INTO storm_history (
+                    alert_id, state, county, event_type, headline, description,
+                    hail_size, hail_size_text, wind_speed, onset_time, expires_time,
+                    area_desc, raw_data
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            
+            stmt.run(
+                alertData.alertId,
+                alertData.state,
+                alertData.county,
+                alertData.eventType,
+                alertData.headline,
+                alertData.description,
+                alertData.hailSize || 0,
+                alertData.hailSizeText,
+                alertData.windSpeed || 0,
+                alertData.onsetTime,
+                alertData.expiresTime,
+                alertData.areaDesc,
+                JSON.stringify(alertData.rawData),
+                function(err) {
+                    if (err) {
+                        if (err.message.includes('UNIQUE constraint failed')) {
+                            // Alert already stored, this is fine
+                            resolve(null);
+                        } else {
+                            reject(err);
+                        }
+                    } else {
+                        resolve(this.lastID);
+                    }
+                }
+            );
+            
+            stmt.finalize();
+        });
+    }
+
+    // Get storm history for specific states and time period
+    async getStormHistory(states, startDate, endDate, minHailSize = 0.75) {
+        return new Promise((resolve, reject) => {
+            const stateList = states.map(() => '?').join(',');
+            const query = `
+                SELECT * FROM storm_history 
+                WHERE state IN (${stateList})
+                AND onset_time >= ?
+                AND onset_time <= ?
+                AND hail_size >= ?
+                ORDER BY onset_time DESC
+            `;
+            
+            const params = [...states, startDate, endDate, minHailSize];
+            
+            this.db.all(query, params, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
+    }
+
+    // Get storm statistics for a state
+    async getStormStatistics(state, months = 12) {
+        return new Promise((resolve, reject) => {
+            const query = `
+                SELECT 
+                    COUNT(*) as total_events,
+                    COUNT(CASE WHEN hail_size >= 0.75 THEN 1 END) as hail_events,
+                    COUNT(CASE WHEN wind_speed >= 70 THEN 1 END) as wind_events,
+                    MAX(hail_size) as max_hail_size,
+                    MAX(wind_speed) as max_wind_speed,
+                    MIN(onset_time) as earliest_event,
+                    MAX(onset_time) as latest_event
+                FROM storm_history 
+                WHERE state = ?
+                AND onset_time >= datetime('now', '-${months} months')
+            `;
+            
+            this.db.get(query, [state], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
         });
     }
 }

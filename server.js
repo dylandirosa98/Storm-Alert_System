@@ -136,7 +136,8 @@ app.post('/api/subscribe', async (req, res) => {
                         stormHistoryPdfPath = await stormHistoryService.generateStormHistoryPDF(
                             weatherService,
                             states,
-                            null // Will use default path
+                            null, // Will use default path
+                            db    // Pass database for historical data
                         );
                         console.log('✅ Storm history PDF generated successfully');
                     } catch (pdfError) {
@@ -639,6 +640,34 @@ async function checkForStormsAndAlert() {
                     if (stormAnalysis.length > 0) {
                         console.log(`⚡ ${stormAnalysis.length} qualifying storm events found in ${state}!`);
                         
+                        // Store each storm alert in the database for historical tracking
+                        for (const storm of stormAnalysis) {
+                            try {
+                                // Extract alert ID from the storm data
+                                const alertId = storm.id || `${state}-${storm.event}-${new Date(storm.onset || storm.effective).getTime()}`;
+                                
+                                await db.storeStormAlert({
+                                    alertId: alertId,
+                                    state: state,
+                                    county: storm.areaDesc || '',
+                                    eventType: storm.event || 'Unknown',
+                                    headline: storm.headline || '',
+                                    description: storm.description || '',
+                                    hailSize: storm.hailSize || 0,
+                                    hailSizeText: storm.hailSizeName || '',
+                                    windSpeed: storm.windSpeed || 0,
+                                    onsetTime: storm.onset || storm.effective,
+                                    expiresTime: storm.expires || storm.ends,
+                                    areaDesc: storm.areaDesc || '',
+                                    rawData: storm
+                                });
+                                
+                                console.log(`💾 Stored storm alert in history: ${alertId}`);
+                            } catch (storeError) {
+                                console.error(`❌ Error storing storm alert:`, storeError.message);
+                            }
+                        }
+                        
                         // Get companies subscribed to this state using Database class method
                         const companies = await db.getCompaniesByState(state);
 
@@ -812,6 +841,34 @@ async function runStormCheck() {
                 }
 
                 console.log(`✅ Found ${stormDataArray.length} storms that meet the criteria for ${state}.`);
+                
+                // Store each storm in the database for historical tracking
+                for (const storm of stormDataArray) {
+                    try {
+                        const alertId = storm.id || `${state}-${storm.event}-${new Date(storm.onset || storm.effective).getTime()}`;
+                        
+                        await db.storeStormAlert({
+                            alertId: alertId,
+                            state: state,
+                            county: storm.areaDesc || '',
+                            eventType: storm.event || 'Unknown',
+                            headline: storm.headline || '',
+                            description: storm.description || '',
+                            hailSize: storm.hailSize || 0,
+                            hailSizeText: storm.hailSizeName || '',
+                            windSpeed: storm.windSpeed || 0,
+                            onsetTime: storm.onset || storm.effective,
+                            expiresTime: storm.expires || storm.ends,
+                            areaDesc: storm.areaDesc || '',
+                            rawData: storm
+                        });
+                        
+                        console.log(`💾 Stored storm alert in history: ${alertId}`);
+                    } catch (storeError) {
+                        console.error(`❌ Error storing storm alert:`, storeError.message);
+                    }
+                }
+                
                 const companies = await db.getCompaniesByState(state);
                 
                 if (companies.length === 0) {

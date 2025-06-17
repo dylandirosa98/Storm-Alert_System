@@ -31,12 +31,12 @@ class StormHistoryService {
         };
     }
 
-    async generateStormHistoryPDF(weatherService, states, outputPath) {
+    async generateStormHistoryPDF(weatherService, states, outputPath, database = null) {
         console.log(`Generating 12-month hail history PDF for states: ${states.join(', ')}`);
         
         try {
             // Collect storm data for the past 12 months
-            const stormData = await this.collectStormHistory(weatherService, states);
+            const stormData = await this.collectStormHistory(weatherService, states, database);
             
             // Filter and process the data (hail only)
             const processedData = this.processStormData(stormData);
@@ -52,53 +52,74 @@ class StormHistoryService {
         }
     }
 
-    async collectStormHistory(weatherService, states) {
+    async collectStormHistory(weatherService, states, database) {
         const allStorms = [];
         const twelveMonthsAgo = new Date();
         twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+        const now = new Date();
         
-        for (const state of states) {
-            console.log(`Collecting historical hail data for ${state}...`);
-            
+        console.log(`📊 Collecting storm history from database first...`);
+        
+        // First, try to get data from our database
+        if (database) {
             try {
-                // Get historical alerts for the past 12 months (8760 hours)
-                // Increase the hours to ensure we capture all data
-                const alerts = await weatherService.getRecentHistoricalAlerts(state, 8760);
-                console.log(`Found ${alerts.length} total alerts for ${state}`);
+                const dbStorms = await database.getStormHistory(
+                    states,
+                    twelveMonthsAgo.toISOString(),
+                    now.toISOString(),
+                    0.75 // minimum hail size
+                );
                 
-                for (const alert of alerts) {
-                    const stormInfo = this.extractStormInfo(alert, state);
-                    if (stormInfo && this.meetsFilterCriteria(stormInfo)) {
-                        allStorms.push(stormInfo);
-                    }
+                console.log(`💾 Found ${dbStorms.length} storms in database`);
+                
+                // Convert database records to our format
+                for (const dbStorm of dbStorms) {
+                    allStorms.push({
+                        date: new Date(dbStorm.onset_time),
+                        county: dbStorm.county,
+                        state: dbStorm.state,
+                        eventType: 'Hail',
+                        hailSize: dbStorm.hail_size,
+                        hailSizeName: dbStorm.hail_size_text,
+                        description: dbStorm.description,
+                        severity: dbStorm.hail_size >= 2.0 ? 'Extreme' : 
+                                 dbStorm.hail_size >= 1.5 ? 'Severe' : 'Moderate',
+                        rankScore: dbStorm.hail_size * 100
+                    });
                 }
+            } catch (dbError) {
+                console.error('Error fetching from database:', dbError);
+            }
+        }
+        
+        // If we have less than expected data, also check the API
+        if (allStorms.length < 5) { // Arbitrary threshold
+            console.log(`⚠️ Limited database data (${allStorms.length} events). Checking API for recent data...`);
+            
+            for (const state of states) {
+                console.log(`Collecting recent hail data from API for ${state}...`);
                 
-                // Also check for any missed alerts by querying different zones
-                const stateZones = weatherService.stateZones[state];
-                if (stateZones && stateZones.length > 0) {
-                    for (const zone of stateZones.slice(0, 3)) { // Check first 3 zones for better coverage
-                        try {
-                            const zoneAlerts = await weatherService.getHistoricalAlertsByZone(zone, 8760);
-                            for (const alert of zoneAlerts) {
-                                const stormInfo = this.extractStormInfo(alert, state);
-                                if (stormInfo && this.meetsFilterCriteria(stormInfo)) {
-                                    // Check if we already have this storm
-                                    const isDuplicate = allStorms.some(s => 
-                                        s.date.getTime() === stormInfo.date.getTime() &&
-                                        s.county === stormInfo.county
-                                    );
-                                    if (!isDuplicate) {
-                                        allStorms.push(stormInfo);
-                                    }
-                                }
+                try {
+                    // Only check recent data from API (last 30 days)
+                    const alerts = await weatherService.getRecentHistoricalAlerts(state, 720);
+                    console.log(`Found ${alerts.length} recent alerts for ${state}`);
+                    
+                    for (const alert of alerts) {
+                        const stormInfo = this.extractStormInfo(alert, state);
+                        if (stormInfo && this.meetsFilterCriteria(stormInfo)) {
+                            // Check if we already have this storm from database
+                            const isDuplicate = allStorms.some(s => 
+                                Math.abs(s.date.getTime() - stormInfo.date.getTime()) < 3600000 && // Within 1 hour
+                                s.state === stormInfo.state
+                            );
+                            if (!isDuplicate) {
+                                allStorms.push(stormInfo);
                             }
-                        } catch (zoneError) {
-                            console.error(`Error fetching zone ${zone} data:`, zoneError.message);
                         }
                     }
+                } catch (error) {
+                    console.error(`Error collecting API data for ${state}:`, error);
                 }
-            } catch (error) {
-                console.error(`Error collecting data for ${state}:`, error);
             }
         }
         
